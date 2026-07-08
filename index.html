@@ -169,10 +169,10 @@
     </div>
   </div>
 
-  <!-- AI VISION SCAN -->
+  <!-- PATTERN SCAN -->
   <div class="searchbox" style="margin-bottom:12px">
     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleScanPanel()">
-      <strong style="color:var(--gold);font-size:.95em">🤖 Scan Pattern (AI Vision)</strong>
+      <strong style="color:var(--gold);font-size:.95em">🔎 Scan Pattern (percuma)</strong>
       <span id="scanArrow" style="color:var(--mut)">▼</span>
     </div>
     <div id="scanBody" style="display:none;margin-top:12px">
@@ -193,7 +193,7 @@
       <div id="scanProgress"></div>
       <div id="scanResults" class="scan-list"></div>
       <div style="font-size:.72em;color:var(--mut);margin-top:8px;line-height:1.5">
-        💡 Setiap perbandingan panggil Claude vision API (ada kos ikut penggunaan) &amp; makan masa ~1-2 saat setiap tarikh. Mula dengan "20 terkini" dulu untuk test.
+        💡 Scan awal 100% percuma (banding corak warna candle). Lepas tu, tekan <b>🤖 Verify AI</b> kat mana-mana card untuk minta AI "tengok" & sahkan tarikh tu sahaja — cuma pakai quota untuk yang kau verify, bukan semua.
       </div>
     </div>
   </div>
@@ -670,8 +670,11 @@ function setCmpMode(m){
 }
 function updateCmpOpacity(v){ document.getElementById('cmpTop').style.opacity=(v/100); }
 
-/* ====== AI VISION SCAN ====== */
-let scanSampleB64=null, scanSampleType=null;
+/* ====== FREE PATTERN SCAN (client-side color-signature, no AI cost) ====== */
+/* ====== + optional on-demand AI verify per card (Claude vision) ====== */
+let scanSampleImg=null, scanSampleB64=null, scanSampleType=null;
+let scanCache={}; // date -> {base64, contentType, beza, id}
+const SIG_W=240, SIG_H=140;
 
 function toggleScanPanel(){
   const b=document.getElementById('scanBody'),a=document.getElementById('scanArrow');
@@ -679,49 +682,64 @@ function toggleScanPanel(){
   b.style.display=open?'block':'none'; a.textContent=open?'\u25B2':'\u25BC';
 }
 
-function fileToBase64(file){
-  return new Promise((resolve,reject)=>{
-    const r=new FileReader();
-    r.onload=()=>resolve(r.result.split(',')[1]);
-    r.onerror=reject;
-    r.readAsDataURL(file);
-  });
-}
-
-document.getElementById('scanFileInput').addEventListener('change', async (e)=>{
+document.getElementById('scanFileInput').addEventListener('change', (e)=>{
   const f=e.target.files[0];
   if(!f) return;
   scanSampleType=f.type||'image/jpeg';
-  scanSampleB64=await fileToBase64(f);
-  const prev=document.getElementById('scanPreview');
-  prev.src=URL.createObjectURL(f);
-  prev.style.display='block';
-  document.getElementById('scanDrop').classList.add('has-img');
+  const reader=new FileReader();
+  reader.onload=()=>{ scanSampleB64=reader.result.split(',')[1]; };
+  reader.readAsDataURL(f);
+
+  const url=URL.createObjectURL(f);
+  const img=new Image();
+  img.onload=()=>{
+    scanSampleImg=img;
+    const prev=document.getElementById('scanPreview');
+    prev.src=url; prev.style.display='block';
+    document.getElementById('scanDrop').classList.add('has-img');
+  };
+  img.src=url;
 });
 
-async function fetchImageBase64(fid){
-  const res=await fetch(`/.netlify/functions/fetch-image?id=${fid}`);
-  if(!res.ok) throw new Error('fetch-image gagal ('+res.status+')');
-  return res.json(); // {base64, contentType}
+// Draw an image (already loaded, or via data: URI) to a fixed WxH canvas and
+// extract a per-column bullish/bearish signature based on candle color pixels.
+function extractSignature(imgEl){
+  const c=document.createElement('canvas');
+  c.width=SIG_W; c.height=SIG_H;
+  const ctx=c.getContext('2d');
+  ctx.drawImage(imgEl,0,0,SIG_W,SIG_H);
+  const data=ctx.getImageData(0,0,SIG_W,SIG_H).data;
+  const sig=new Array(SIG_W).fill(0);
+  for(let x=0;x<SIG_W;x++){
+    let up=0, down=0;
+    for(let y=0;y<SIG_H;y++){
+      const i=(y*SIG_W+x)*4;
+      const r=data[i], g=data[i+1], b=data[i+2];
+      // blue/teal candle (up) vs red/pink candle (down) — ignore black bg & gray/white text
+      if(b>110 && b>r+25) up++;
+      else if(r>110 && r>b+25) down++;
+    }
+    const total=up+down;
+    sig[x]= total>0 ? (up-down)/total : 0;
+  }
+  return sig;
 }
 
-async function compareImages(candB64,candType,date,beza){
-  const res=await fetch('/.netlify/functions/vision-compare',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      sampleBase64:scanSampleB64, sampleType:scanSampleType,
-      candidateBase64:candB64, candidateType:candType,
-      candidateDate:date, candidateBeza:beza
-    })
-  });
-  if(!res.ok) throw new Error('vision-compare gagal ('+res.status+')');
-  return res.json(); // {match_score, verdict}
+function correlate(a,b){
+  const n=a.length;
+  const meanA=a.reduce((s,v)=>s+v,0)/n, meanB=b.reduce((s,v)=>s+v,0)/n;
+  let num=0, denA=0, denB=0;
+  for(let i=0;i<n;i++){
+    const da=a[i]-meanA, db=b[i]-meanB;
+    num+=da*db; denA+=da*da; denB+=db*db;
+  }
+  if(denA===0||denB===0) return 0;
+  return num/Math.sqrt(denA*denB); // -1..1
 }
 
 function scoreClass(s){
   if(s===null||s===undefined) return 'low';
-  if(s>=70) return '';       // hijau (default .sc-score)
+  if(s>=70) return '';
   if(s>=40) return 'mid';
   return 'low';
 }
@@ -729,40 +747,86 @@ function scoreClass(s){
 function renderScanResults(list){
   const el=document.getElementById('scanResults');
   el.innerHTML=list.map(r=>`
-    <div class="scan-card" onclick="openLb('${THUMB(r.id)}','${fmtDate(r.date)} \u00B7 score ${r.score!=null?r.score+'%':'-'}')">
-      <img loading="lazy" src="${THUMB(r.id)}" alt="${r.date}">
+    <div class="scan-card">
+      <img loading="lazy" src="${THUMB(r.id)}" alt="${r.date}" onclick="openLb('${THUMB(r.id)}','${fmtDate(r.date)} \u00B7 score ${r.score!=null?r.score+'%':'-'}')">
       <div class="sc-meta">
         <div class="sc-date">${fmtDate(r.date)} <span class="sc-score ${scoreClass(r.score)}">${r.score!=null?r.score+'%':'-'}</span></div>
         <div class="sc-beza">Beza: ${r.beza!==undefined&&r.beza!==null?r.beza.toFixed(2):'-'}</div>
-        <div class="sc-verdict">${r.verdict||''}</div>
+        <div id="ai-${r.date}">
+          <button class="sc-verify-btn" onclick="verifyWithAI('${r.date}')">\uD83E\uDD16 Verify AI</button>
+        </div>
       </div>
     </div>`).join('');
 }
 
+function loadImgFromBase64(base64,contentType){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>resolve(img);
+    img.onerror=reject;
+    img.src=`data:${contentType};base64,${base64}`;
+  });
+}
+
 async function runScan(){
-  if(!scanSampleB64){ alert('Upload gambar sample dulu.'); return; }
+  if(!scanSampleImg){ alert('Upload gambar sample dulu.'); return; }
   const limitSel=document.getElementById('scanLimit').value;
   let dates=Object.keys(IMG).sort((a,b)=>a<b?1:-1); // terkini dulu
   if(limitSel!=='all') dates=dates.slice(0,parseInt(limitSel,10));
 
   const progressEl=document.getElementById('scanProgress');
   document.getElementById('scanResults').innerHTML='';
+  const sampleSig=extractSignature(scanSampleImg);
   const results=[];
+  scanCache={};
 
   for(let i=0;i<dates.length;i++){
     const date=dates[i];
     progressEl.textContent=`\u23F3 Scanning ${i+1}/${dates.length} \u2014 ${fmtDate(date)}...`;
     try{
-      const {base64,contentType}=await fetchImageBase64(IMG[date]);
-      const cmp=await compareImages(base64,contentType,date,bezaMap[date]!==undefined?bezaMap[date].toFixed(2):'-');
-      results.push({date,id:IMG[date],beza:bezaMap[date],score:cmp.match_score,verdict:cmp.verdict});
+      const {base64,contentType}=await fetch(`/.netlify/functions/fetch-image?id=${IMG[date]}`).then(r=>{
+        if(!r.ok) throw new Error('fetch-image gagal ('+r.status+')');
+        return r.json();
+      });
+      const candImg=await loadImgFromBase64(base64,contentType);
+      const candSig=extractSignature(candImg);
+      const corr=correlate(sampleSig,candSig);
+      const score=Math.round(((corr+1)/2)*100);
+      scanCache[date]={base64,contentType,beza:bezaMap[date],id:IMG[date]}; // cache for on-demand AI verify
+      results.push({date,id:IMG[date],beza:bezaMap[date],score});
     }catch(err){
       console.error(date,err);
     }
     results.sort((a,b)=>(b.score||0)-(a.score||0));
     renderScanResults(results.slice(0,15));
   }
-  progressEl.textContent=`\u2705 Selesai \u2014 ${dates.length} tarikh discan. Tunjuk top 15 ikut match score.`;
+  progressEl.textContent=`\u2705 Selesai \u2014 ${dates.length} tarikh discan (percuma, tiada kos API). Top 15 ikut match score.`;
+}
+
+/* ====== ON-DEMAND AI VERIFY (only called per-card, minimal cost) ====== */
+async function verifyWithAI(date){
+  const slot=document.getElementById('ai-'+date);
+  const cand=scanCache[date];
+  if(!cand||!scanSampleB64){ slot.innerHTML='<span class="sc-verdict">\u26A0\uFE0F Data tak lengkap, cuba scan semula.</span>'; return; }
+  slot.innerHTML='<span class="sc-verdict">\u23F3 AI tengah analisa...</span>';
+  try{
+    const res=await fetch('/.netlify/functions/vision-compare',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        sampleBase64:scanSampleB64, sampleType:scanSampleType,
+        candidateBase64:cand.base64, candidateType:cand.contentType,
+        candidateDate:date, candidateBeza:cand.beza!==undefined&&cand.beza!==null?cand.beza.toFixed(2):'-'
+      })
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const j=await res.json();
+    if(j.error){ slot.innerHTML=`<span class="sc-verdict">\u26A0\uFE0F ${j.error}</span>`; return; }
+    const cls=scoreClass(j.match_score);
+    slot.innerHTML=`<div class="sc-ai-result"><span class="sc-score ${cls}">${j.match_score!=null?j.match_score+'%':'-'}</span> ${j.verdict||''}</div>`;
+  }catch(err){
+    slot.innerHTML=`<span class="sc-verdict">\u26A0\uFE0F Gagal verify: ${err.message}</span>`;
+  }
 }
 
 /* ====== INIT ====== */

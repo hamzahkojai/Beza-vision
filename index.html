@@ -183,9 +183,10 @@
       </label>
       <div class="scan-row">
         <select id="scanLimit">
-          <option value="20">20 tarikh terkini</option>
-          <option value="50" selected>50 tarikh terkini</option>
-          <option value="100">100 tarikh terkini</option>
+          <option value="buckets" selected>Ikut selisih tarikh dicari (0.0–0.8)</option>
+          <option value="20">20 tarikh terkini (semua)</option>
+          <option value="50">50 tarikh terkini (semua)</option>
+          <option value="100">100 tarikh terkini (semua)</option>
           <option value="all">Semua tarikh dlm index</option>
         </select>
         <button onclick="runScan()">🔎 Scan</button>
@@ -193,7 +194,7 @@
       <div id="scanProgress"></div>
       <div id="scanResults" class="scan-list"></div>
       <div style="font-size:.72em;color:var(--mut);margin-top:8px;line-height:1.5">
-        💡 Scan awal 100% percuma (banding corak warna candle). Lepas tu, tekan <b>🤖 Verify AI</b> kat mana-mana card untuk minta AI "tengok" & sahkan tarikh tu sahaja — cuma pakai quota untuk yang kau verify, bukan semua.
+        💡 Default: scan cuma tarikh yang selisih beza dia dekat dgn tarikh kau cari (macam bucket 0.0/0.1/0.3/0.4/0.8 kat bawah) — kena tekan <b>Cari Beza</b> dulu. Lepas scan, tekan <b>🤖 Verify AI</b> kat mana-mana card untuk sahkan tarikh tu sahaja.
       </div>
     </div>
   </div>
@@ -771,8 +772,32 @@ function loadImgFromBase64(base64,contentType){
 async function runScan(){
   if(!scanSampleImg){ alert('Upload gambar sample dulu.'); return; }
   const limitSel=document.getElementById('scanLimit').value;
-  let dates=Object.keys(IMG).sort((a,b)=>a<b?1:-1); // terkini dulu
-  if(limitSel!=='all') dates=dates.slice(0,parseInt(limitSel,10));
+
+  let dates;
+  if(limitSel==='buckets'){
+    if(!pickedDate || bezaMap[pickedDate]===undefined){
+      alert('Pilih tarikh & tekan "Cari Beza" dulu (supaya scan tahu nak banding ikut selisih mana).');
+      return;
+    }
+    // Union of every date across all selisih buckets (0.0/0.1/0.3/0.4/0.8) relative to pickedDate
+    const seen=new Set();
+    dates=[];
+    BUCKETS.forEach(bk=>{
+      findSamples(bk).forEach(x=>{
+        if(!seen.has(x.date)){ seen.add(x.date); dates.push(x.date); }
+      });
+    });
+    dates.sort((a,b)=>a<b?1:-1); // terkini dulu
+  } else {
+    dates=Object.keys(IMG).sort((a,b)=>a<b?1:-1); // terkini dulu
+    if(limitSel!=='all') dates=dates.slice(0,parseInt(limitSel,10));
+  }
+
+  if(dates.length===0){
+    document.getElementById('scanProgress').textContent='\u26A0\uFE0F Takde calon dalam bucket selisih tarikh ni. Cuba pilih mode "terkini" instead.';
+    document.getElementById('scanResults').innerHTML='';
+    return;
+  }
 
   const progressEl=document.getElementById('scanProgress');
   document.getElementById('scanResults').innerHTML='';
@@ -800,7 +825,8 @@ async function runScan(){
     results.sort((a,b)=>(b.score||0)-(a.score||0));
     renderScanResults(results.slice(0,15));
   }
-  progressEl.textContent=`\u2705 Selesai \u2014 ${dates.length} tarikh discan (percuma, tiada kos API). Top 15 ikut match score.`;
+  const modeLabel=limitSel==='buckets'?'ikut selisih tarikh dicari':`${dates.length} tarikh`;
+  progressEl.textContent=`\u2705 Selesai \u2014 ${dates.length} tarikh discan (${modeLabel}, percuma, tiada kos API). Top 15 ikut match score.`;
 }
 
 /* ====== ON-DEMAND AI VERIFY (only called per-card, minimal cost) ====== */

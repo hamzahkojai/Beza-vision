@@ -50,6 +50,10 @@
   .card .date{color:var(--gold);font-weight:700;font-size:.9em}
   .card .beza{color:var(--mut);font-size:.78em;margin-top:2px}
   .card .recent{color:var(--green);font-size:.7em;font-weight:700}
+  .mv-badge{display:inline-block;margin-top:4px;padding:1px 7px;border-radius:6px;font-size:.72em;font-weight:800;letter-spacing:.3px}
+  .mv-buy{background:rgba(46,204,113,.16);color:#2ecc71;border:1px solid rgba(46,204,113,.45)}
+  .mv-sell{background:rgba(255,92,108,.14);color:#ff5c6c;border:1px solid rgba(255,92,108,.45)}
+  .mv-none{background:rgba(255,255,255,.05);color:var(--mut);border:1px solid var(--line)}
   .empty{color:var(--mut);font-size:.85em;padding:10px;text-align:center}
   .lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:100;
     align-items:center;justify-content:center;flex-direction:column}
@@ -107,6 +111,806 @@
   .scan-drop{border:2px dashed var(--line);border-radius:10px;padding:16px;text-align:center;
     color:var(--mut);font-size:.85em;cursor:pointer;background:var(--navy)}
   .scan-drop.has-img{border-color:var(--gold);color:var(--gold)}
+  #scanFileInput{display:none}
+  #scanPreview{display:none;max-width:100%;max-height:160px;border-radius:8px;margin-top:10px}
+  .scan-row{display:flex;gap:8px;margin-top:10px;align-items:center}
+  select{background:var(--navy);color:var(--txt);border:1px solid var(--line);border-radius:10px;
+    padding:11px 10px;font-size:.9em;flex:1}
+  #scanProgress{font-size:.8em;color:var(--gold);margin-top:10px;min-height:1.2em}
+  .scan-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+  .scan-card{display:flex;gap:10px;background:var(--navy);border:1px solid var(--line);
+    border-radius:10px;overflow:hidden;cursor:pointer}
+  .scan-card img{width:110px;height:88px;object-fit:cover;flex-shrink:0;background:#000}
+  .sc-meta{padding:8px 10px 8px 0;flex:1;min-width:0}
+  .sc-date{color:var(--gold);font-weight:700;font-size:.9em;display:flex;justify-content:space-between;gap:6px}
+  .sc-score{background:var(--green);color:#06251a;border-radius:8px;padding:1px 8px;font-size:.85em;white-space:nowrap}
+  .sc-score.mid{background:var(--gold);color:#1a1206}
+  .sc-score.low{background:var(--red);color:#2a0509}
+  .sc-beza{color:var(--mut);font-size:.76em;margin-top:2px}
+  .sc-verdict{color:var(--txt);font-size:.78em;margin-top:4px;line-height:1.4}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🔍 BEZA · SAMPLE</h1>
+    <div class="sub">GOLDmicro M15 · Pilih tarikh → contoh ikut selisih beza · Entry 10:30 EET</div>
+    <div id="status" class="status">⏳ Loading data sheet…</div>
+  </header>
+
+  <!-- SETTINGS -->
+  <div class="searchbox" style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleSettings()">
+      <strong style="color:var(--gold);font-size:.95em">⚙️ Settings — Sheet ID</strong>
+      <span id="setArrow" style="color:var(--mut)">▼</span>
+    </div>
+    <div id="settingsBody" style="display:none;margin-top:12px">
+      <label style="font-size:.8em;color:var(--mut)">Sheet ID</label>
+      <input type="text" id="sheetIdInput" style="width:100%;margin:4px 0 10px">
+      <label style="font-size:.8em;color:var(--mut)">Nama Tab</label>
+      <input type="text" id="sheetTabInput" style="width:100%;margin:4px 0 10px">
+      <label style="font-size:.8em;color:var(--mut)">Drive Folder ID (gambar)</label>
+      <input type="text" id="folderIdInput" placeholder="105m3HxOyTqQX3suoUl6z-EqAuiJ9NnHg" style="width:100%;margin:4px 0 10px">
+      <label style="font-size:.8em;color:var(--mut)">Google API Key (auto-load gambar)</label>
+      <input type="text" id="apiKeyInput" placeholder="AIza… (restrict ke Drive API)" style="width:100%;margin:4px 0 10px">
+      <button onclick="saveSettings()" style="width:100%">💾 Simpan &amp; Sync</button>
+      <div style="font-size:.74em;color:var(--mut);margin-top:8px;line-height:1.4">
+        💡 Buka dari <b>Netlify URL</b> (https). Isi <b>API Key</b> untuk auto-load SEMUA gambar dari Drive (takyah update manual). Tanpa key, app guna index terbina (2025-2026).
+      </div>
+    </div>
+  </div>
+
+
+  <!-- FAVORITES -->
+  <div class="searchbox" style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleFavPanel()">
+      <strong style="color:var(--gold);font-size:.95em">⭐ Favorites & Folder (<span id="favCount">0</span>)</strong>
+      <span id="favArrow" style="color:var(--mut)">▼</span>
+    </div>
+    <div id="favBody" style="display:none;margin-top:12px">
+      <button onclick="addFolder()" style="width:100%;margin-bottom:10px">➕ Folder Baru</button>
+      <div id="favList"></div>
+    </div>
+  </div>
+
+  <!-- PATTERN SCAN -->
+  <div class="searchbox" style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleScanPanel()">
+      <strong style="color:var(--gold);font-size:.95em">🔎 Scan Pattern (percuma)</strong>
+      <span id="scanArrow" style="color:var(--mut)">▼</span>
+    </div>
+    <div id="scanBody" style="display:none;margin-top:12px">
+      <label class="scan-drop" id="scanDrop" for="scanFileInput">
+        📤 Upload gambar sample (chart pattern nak dicari)
+        <input type="file" id="scanFileInput" accept="image/*">
+        <img id="scanPreview">
+      </label>
+      <div class="scan-row">
+        <select id="scanLimit">
+          <option value="buckets" selected>Ikut selisih tarikh dicari (0.0–0.8)</option>
+          <option value="20">20 tarikh terkini (semua)</option>
+          <option value="50">50 tarikh terkini (semua)</option>
+          <option value="100">100 tarikh terkini (semua)</option>
+          <option value="all">Semua tarikh dlm index</option>
+        </select>
+        <button onclick="runScan()">🔎 Scan</button>
+      </div>
+      <div id="scanProgress"></div>
+      <div id="scanResults" class="scan-list"></div>
+      <div style="font-size:.72em;color:var(--mut);margin-top:8px;line-height:1.5">
+        💡 Default: scan cuma tarikh yang selisih beza dia dekat dgn tarikh kau cari (macam bucket 0.0/0.1/0.3/0.4/0.8 kat bawah) — kena tekan <b>Cari Beza</b> dulu. Lepas scan, tekan <b>🤖 Verify AI</b> kat mana-mana card untuk sahkan tarikh tu sahaja.
+      </div>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="searchbox">
+    <div class="search-row">
+      <input type="date" id="dateInput">
+      <button onclick="cariTarikh()">Cari Beza</button>
+    </div>
+    <div class="result" id="result">
+      <div class="lbl">Beza untuk <span id="rDate">—</span></div>
+      <div class="big"><span id="rBeza">—</span> <span style="font-size:.4em;color:var(--mut)">pip</span></div>
+      <div class="bucket-tag" id="rBucket">—</div>
+      <div id="rImgWrap" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- 5 BUCKET TETAP -->
+  <div id="buckets"></div>
+
+  <div class="foot">📌 Pilih tarikh → contoh hari lain ikut selisih (0.0/0.1/0.3/0.4/0.8), latest dulu · BEZA·VISION</div>
+</div>
+
+<div class="lb" id="lb" onclick="closeLb()">
+  <span class="x">&times;</span>
+  <img id="lbImg" src="" alt="">
+  <div class="cap" id="lbCap"></div>
+</div>
+
+<!-- COMPARE / OVERLAY MODAL -->
+<div class="cmp" id="cmpModal">
+  <div class="cmp-head">
+    <strong>🔀 Banding Pattern</strong>
+    <span class="cmp-x" onclick="closeCompare()">&times;</span>
+  </div>
+  <div class="cmp-toggle">
+    <button id="cmpBtnSide" class="active" onclick="setCmpMode('side')">Side-by-side</button>
+    <button id="cmpBtnOverlay" onclick="setCmpMode('overlay')">Overlay</button>
+  </div>
+
+  <div id="cmpSideView" class="cmp-side">
+    <div class="cmp-col">
+      <div class="cmp-label" id="cmpLabelA"></div>
+      <img id="cmpImgA" src="">
+    </div>
+    <div class="cmp-col">
+      <div class="cmp-label" id="cmpLabelB"></div>
+      <img id="cmpImgB" src="">
+    </div>
+  </div>
+
+  <div id="cmpOverlayView" class="cmp-overlay" style="display:none">
+    <div class="cmp-stack">
+      <img id="cmpBase" src="">
+      <img id="cmpTop" src="" style="opacity:.5">
+    </div>
+    <input type="range" id="cmpSlider" min="0" max="100" value="50" oninput="updateCmpOpacity(this.value)">
+    <div class="cmp-legend"><span id="cmpLegA"></span><span id="cmpLegB"></span></div>
+  </div>
+
+  <div class="cmp-hint">💡 Overlay: geser slider untuk fade antara 2 chart — kalau candle/zone sepadan sama tempat, pattern match kuat.</div>
+</div>
+
+<script>
+/* ====== CONFIG ====== */
+const DEFAULT_SHEET_ID="1Copyt1vbITyu9MZK-_PlrB4t_BlrES-AjUrffFLVtOI";
+const DEFAULT_TAB="Data Historical";
+let SHEET_ID=localStorage.getItem("beza_sheet_id")||DEFAULT_SHEET_ID;
+let SHEET_TAB=localStorage.getItem("beza_sheet_tab")||DEFAULT_TAB;
+const DEFAULT_FOLDER="105m3HxOyTqQX3suoUl6z-EqAuiJ9NnHg";
+let FOLDER_ID=localStorage.getItem("beza_folder_id")||DEFAULT_FOLDER;
+let API_KEY=localStorage.getItem("beza_api_key")||"";
+const THUMB=id=>`https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
+
+/* bucket definitions: key + tolerance */
+const BUCKETS=[
+  {key:"0.0",desc:"beza SAMA dengan tarikh kau"},
+  {key:"0.1",desc:"selisih 0.1 dari beza tarikh kau"},
+  {key:"0.3",desc:"selisih 0.3 dari beza tarikh kau"},
+  {key:"0.4",desc:"selisih 0.4 dari beza tarikh kau"},
+  {key:"0.8",desc:"selisih 0.8 dari beza tarikh kau"},
+];
+
+/* ====== IMG INDEX: date(YYYY-MM-DD) -> Drive fileId ====== */
+/* recent (2026) charts auto-prioritised; older 2014 = fallback */
+let IMG={
+"2026-06-19":"1peCng9m4Cvs-xFBNy1MUf46_Z4PB3OSq","2026-06-18":"1I9RrrpslnXuXB6Qrb1XKST2npTENzLPO",
+"2026-06-17":"1WE9kDdKEIUopL1J8SPi4dXwCI6ltBGNQ","2026-06-16":"15TJE4oNVFAypwmlDzs_4g1bIvpbOWlgo",
+"2026-06-15":"1dQkyCeXiKjMWEw8HvsrDDRF_Tv7P3N7p","2026-06-12":"1dyVGK1lcCSBzwxvNLVD-OFEwczhMqaTc",
+"2026-06-11":"1gHEZVxoU_NXxm-lIRlfg6cXWrFMltJqr","2026-06-10":"1Jie4H3oOYx1usrm1TPydreLf4ZBIUhCW",
+"2026-06-09":"1sjAOYNqj7Ne-Sv8JnqFON7l4dPX8m-Sl","2026-06-08":"1S52C__RKXPSA9nmV24Wf_-VEnmQMAYF0",
+"2026-06-05":"1DpY7kSEefVocZGaHk_iz3QKmIs4VyqEt","2026-06-04":"1azt5sxxFWVZx4jExf2CD78yQ5lSfo3Kw",
+"2026-06-03":"1n2oiJZPvbVzot2klomxjvM35lxhBscfU","2026-06-02":"1ldb1dHb5OSJptprlrG-NPsVAPMXpO1fg",
+"2026-06-01":"11rVeIKqtUu4azn_Kylks4YdFnGVxt9Qz","2026-05-29":"1D67CvdyN3JDwA4AZQvC00eg6o4EsMmWc",
+"2026-05-28":"1gOWuClJWknghuOxPDK7-SQG9d7dzKY2G","2026-05-27":"1OF72JP-4h-eCr1Dg0Ya9Ik_o8GER1GSh",
+"2026-05-26":"1BEkD3qaYhCvrg7IJmyzTpArLfvmJZx1h","2026-05-25":"1bxRCW6laeEWNspLAjRJsjLy1tPjW8RCc",
+"2026-05-22":"1h0Xc31oADaiHVb9QsXUWeH-_iM7zGizU","2026-05-21":"14rsFDT_CS2V1Z5v6W0ba1ZwQdcNzJDsL",
+"2026-05-20":"1V33lHZ8YHR6Lr5JS9E1Se_PxRgMYaasw","2026-05-19":"1GGewf2rlMSOg4WV1VnhvXVTJYRp6Rwli",
+"2026-05-18":"1Mw4ofhA3W_8O2c_ZInH_KhRm2b1PlWR2","2026-05-15":"1HT3N4V9dnutQR5LVUT6roHEAUnLiXqHY",
+"2026-05-14":"1I1tVLYzPaiPE2tScu6SJhg1OvsnrJtTr","2026-05-13":"1Qi-1nUfIiCCDZfOt7TJ2H9dh4kV5s-ST",
+"2026-05-12":"1nwmmCumzapOB-k_Smo-QiPtk_m5FvHbo","2026-05-11":"1As78y48F8wziqttxdmWEfH87NytM9a9S",
+"2026-05-08":"1_H7NDNRD_MZxJNEC0bjV5QWXOQ0C4MOy","2026-05-07":"1F4yLeDrcAh60DGGeVfTwmPLhIr6w1XcI",
+"2026-05-06":"1hFPtfIzfwopjmoCBl99iYjkIzNN7NBET","2026-05-05":"1JwnxziwQ37AZTs15_i1Fh8W_2S1v2HBE",
+"2026-05-04":"1uUQQP1FJI4tG8KspZMcIb4GU9-8qg8Z7","2026-05-01":"1-7VeuG9Cg9xDx6mAF4zNjuztsim_0NFZ",
+"2026-04-30":"1MKb5JwfGbuBbv038ZUdqkDVeN5lss_yp","2026-04-29":"11iiKwm26PNyZPiY24d9yiDl-XlvDo-yz",
+"2026-04-28":"1PSXV-TSLoKr9onDNJWKu2PIP45piHPnh","2026-04-27":"1hi73VF9kNFCkzno3d1OpLiS9yOwE_u6J",
+"2026-04-24":"1c5gpMF4buoJiCxYyUA8Ta4gW7qMkLWv_","2026-04-23":"1KVsMTS8keH5sq-YZ6qOSXpxkClWyzBT2",
+"2026-04-22":"1bD0qO7Eh-7d1ip0iOLLIQKzyoPA7NAR5","2026-04-21":"1xlnUMlhHqnnTXhRqfx7N42ptQrvW6i8D",
+"2026-04-20":"1PRQ7tgHNmstaFdlbveyxYFDROM6nRiYI","2026-04-17":"1bzKfHrgzp_yGUvPff48RE34_y2khwW10",
+"2026-04-16":"1buPzvPQdaPr6Lg8ENeSbaEaPIFA8KaPB","2026-04-15":"1JxrIuZesx7-uqfLbJe_KixKZO4fvcYDe",
+"2026-04-14":"1DGG8-4qdOHIDzHQ0u80Gsg9lTDuCxYhP","2026-04-13":"10p8vVpMW5nrmq-olqFqr-QE45ZO7bjOo",
+"2026-04-10":"1FP31ktUEclMRZCIgq2cARG8LjqgzdIl9","2026-04-09":"1LaXtS6Cpd168ucdZQ92xIuK-yFkZYB3e",
+"2026-04-08":"1hoKtLv2HqbHFjRLMfAc_MVO_dPEFjbA6","2026-04-07":"1cg1sUD5hhZEbwJvk2ZZhaCxY_gvZca_B",
+"2026-04-06":"1pvbo0c8UvbBcwDHYxp99c5IDgDRSIyYk","2026-04-02":"1psnR2w3QKxbtV8QvL-bRtug1qU90sP7N",
+"2026-04-01":"1bVOUadEQA0jkqobD17M6SezGjyT2QGoC","2026-03-31":"1ocklvEL_exEIFUpZRwwpXp0yVZb9HX3O",
+"2026-03-30":"1A6RysWmJvS-q73LeRWmRzgRSpgmF2j8a","2026-03-27":"15-B_y6gPQax4yw45mvfGopP0_Jpnb6HH",
+"2026-03-26":"1wGd9tUlMQnLunTEuJb9clBBHqef-P-wg","2026-03-25":"1t6Lczzkv5ichDloxQbAOCI8wyXCXGN-u",
+"2026-03-24":"1Pdg7zkchx0WIDuFcEyd3prN6OgOOtgnf","2026-03-23":"15mxCbigP_JYzk09YUiC7SS8Rj-R_AZni",
+"2026-03-20":"1OKzyTgk3st5AuFXI2JbjzlpiQWc8LoPL","2026-03-19":"13XHzMLZkIokvEvHsAExdW9knkisYNRK9",
+"2026-03-18":"1wFbV7nk1GePjGdpmSK580LWM1cWfcJu6","2026-03-17":"19XxNZ-gyih07JMVrXd-dmgo8IMDtO9io",
+"2026-03-16":"1HmVCVVftaHp2c1W4aL8MmELguuBIUVfP","2026-03-13":"1NRSSdvtgJEo8nt0L-0q0msi3VDD7k9kY",
+"2026-03-12":"1ksA-X_rAUpEm2A2tcVJRB-y8tWHty6_W","2026-03-11":"1luDHhTVlsbwTQWr-JUX403JbAosjWjCr",
+"2026-03-10":"1DGCv6-ysOOCkZETsRom75x5FN8G9n-qN","2026-03-09":"1IyrJu-jzYjxrOdtxo-2KHKTgfMQey4c4",
+"2026-03-06":"1O1s3StdEXfhPi-sKYa8Dak9XF-B9qUPM","2026-03-05":"1H-uyOpPe_DdRvezC_HfXNacINbFXLYi9",
+"2026-03-04":"1A61N7Zu1Kw7N8UxSTbxLWMLX4b3SZNT2","2026-03-03":"1Rm2WfPDadiovPX7PiaHEVagU5eVWN0fU",
+"2026-03-02":"1Jf_06gBlZjZbhJ_qxK_vWuL-VwWAKmee","2026-02-27":"1SA0alDG4UuQcno189ArYPhGiXDIgD1Kd",
+"2026-02-26":"1CkPUAzid5pNnP8O2rKxcf_lORe-EuzPx","2026-02-25":"17vImgf6kUTJqrZlybfMUXrjJ2nlqjsfh",
+"2026-02-24":"14PqVlBthGh3C_9ENLvv5EgWDHa98ECzG","2026-02-23":"1UGky3AGbT2duVilUZ_IL3inXjtE-_lJR",
+"2026-02-20":"1ieiI0c2Qlo7wCFzin40JQ0OrzQW9NKdt","2026-02-19":"19K6H2SBBmxo6GJgei6P40PrNwoQpuHS-",
+"2026-02-18":"1sIIdZweRYUGUBsFaBc5S5eojAf7n1Hwd","2026-02-17":"1Rhm10fE1joEbZDz1FYx0gJ20Ck0In_PJ",
+"2026-02-16":"15I5-dlLEzCnmT6qhv7McLw0_ughMxksg","2026-02-13":"1FR29ZSSuaIuzcLfPwnJ4weVPM8NImGac",
+"2026-02-12":"1EzJiX8DQt25izBmcCyyA6g5Keg3DsnCr","2026-02-11":"1YNVAiD2nmFEoKYxhcVa3otEwRdetxTMS",
+"2026-02-10":"1EHdSGu2N9aaBVquO8TtQW8wCJ4X4I4O-","2026-02-09":"1o9CRCdLTXrLdM0QVpXk57cDjtiiV2Y_V",
+"2026-02-06":"1e0H7RQlQuc-jtyqCA0O7nT1cMihObTO2","2026-02-05":"116_rz1aiF7sT-pF8uwUvOeBCCfGraOfo",
+"2026-02-04":"1VXtFFTGTVYhbE-ohdjDhSbuVYM9-_anN","2026-02-03":"1M5u0NlqqLl4wmB_XQn7v2gAG-InFNAJH",
+"2026-02-02":"1bwqHtUFZ9uTT3X1U3CBTHHuzYjbxW6MC","2026-01-02":"1_DjYxx-GTrZzRMq_k7XsYm-B16Yde-w6",
+"2025-12-31":"1G1LgguWvkHODXzEsID8KGXo5OeIeFXdP","2025-12-30":"1WkKaGAnEqsLFSsayF5qqZBLnFZ5ho2-r",
+"2025-12-29":"1895xxKW8jzpSW5iM6u8LnLHI4JFHTdN2","2025-12-26":"16y05AtW06HQ1Wi-pkh9w9K662UXi-7ar",
+"2025-12-24":"1Mi9H4V8CjrRbZCBB_h9dPwl8aMab7mjK","2025-12-23":"140k7OOikvzaF7x8ZApswXQRgkS27_DQ5",
+"2025-12-22":"1v3G6pN7sb6c1Zzy5Z6aRDgdfIWYB98Id","2025-12-19":"1BaVMaJ35jpcsHeZz88QWn22uGCimFmbh",
+"2025-12-18":"1RkDemg3vokTeOWirqcvkXRK_cHOEEEOe","2025-12-17":"1sIGcCZNKq_QIKSsmoT9ecbkIoqzxAole",
+"2025-12-16":"1rJcHUj97G6xOKJXb3xg2uyMJ14KTbImy","2025-12-15":"1slv7y23SDr-2y9W0aohOBZyYFAX5nwte",
+"2025-12-12":"1ldJ9Ii5u59jNufyv-iNo6-N-8z5D4XQO","2025-12-11":"12VdhMLoTLvdnLT45h6X-oll93adMjiHF",
+"2025-12-10":"1jbO4OTQAkXInEpR3y_rt7p7Q85oyvmo9","2025-12-09":"1XHf8NtyMhl8GPmnC7n3dFiswvVDisI0e",
+"2025-12-08":"1RpStEdAWFwaCXC7yKolAXzvA37J7WImf","2025-12-05":"1-UHyHoxrR2b4K6-0rArcTKJoVMrvONls",
+"2025-12-04":"1TXWHlcOgk4QH9AvRBFWbFvuJ66YKnjKC","2025-12-03":"1tKl197PR_5WLdKTjjfbZy2Vn5Ody6GFr",
+"2025-12-02":"1frMXu4xxS5PiQLR3dVoIA8VDH6kMsoNa","2025-12-01":"18HFhpLGdun6Zs2I19y-DDRLLaaUYo92B",
+"2025-11-28":"105t2JpvG9rnPgkCY_ZHgk08YdXWyzgJw","2025-11-27":"1kroMuAPjJhYihJrklfO193fX3b4EUUVn",
+"2025-11-26":"1LosIvmu2Mg3-ocCyqDWSN59v57HI7fyg","2025-11-25":"1gO4JStx3RNRiVjuBa4bOJpwYL58TkfWZ",
+"2025-11-24":"19isg94ZBBVsVNcAWTx49G4U4UjAAoQfD","2025-11-21":"1D_R_WYTYwNgAKIygLRE3GSCJAFCDBmUV",
+"2025-11-20":"1buqtAoIAh57gxniBXe8gz9OOYX-Akp0y","2025-11-19":"1mgJWrmbreCXzICm2VKnrkBJWPwwgZcfK",
+"2025-11-18":"1Y2EZGfumXQeILuVHzloh-tGMIkDpbZGk","2025-11-17":"19xwuJlEoKtA_VIsyDVTIePYaRxTYZdsy",
+"2025-11-14":"1R8-Dxc8H_5bB-Eo1EdQKfn8D5Q_KdsGZ","2025-11-13":"1NDKSfOFlOopUd1Nt576XSsAnBHYXsYiD",
+"2025-11-12":"18SrvBDqtnAeOYuoJnkx1T1DebuV3uTON","2025-11-11":"1LMIRQyyv5XGl8u22DYzdnZHrdAMggRRf",
+"2025-11-10":"1WrRBiPdXqlF9ntRn9BoUQL49sgn5mQnx","2025-11-07":"1TCxHiXUgd7OvPa6Qd4nWyEwOhseEGCBU",
+"2025-11-06":"1LQSC1YHj6ZMFclEIC2WlQ-a2jE6UmQmR","2025-11-05":"1Iym7SItjVTF8HJG3lqpKaWv_ysLkYlik",
+"2025-11-04":"1KzuUI91dkhPaCsSY-kYr9bptMu_N800v","2025-11-03":"12RSvaJwynLDzNpTEUlEdUf4YimA9nBKv",
+"2025-10-31":"1mpo9Hh5wzqB9sQrSATWqJDWhCwRuRttY","2025-10-30":"1hDPs8EWnDeBiqbXV_TbWLZWvOXQPVKH-",
+"2025-10-29":"19EKZq_UwBI15jaDkiuIDbaVCGbr-BWyH","2025-10-28":"1ybOLQsD5P6zHoL8yvHoxJYLl2Ae07xXN",
+"2025-10-27":"1Dr4rSgBQSKWNGv52dsfhrwk501Of9phz","2025-10-24":"1z5W4IlGo9KWmQ6tCMR2lrlTPu3DpYw1F",
+"2025-10-23":"1kJADuzaH-Vik3XwKc0uqZpEmFlGdplBy","2025-10-22":"11WERGnWa8DvQz2WE6nCj-Fa1RCY2wlbb",
+"2025-10-21":"1KFFFTLVlZLHNOaLmcqfM-bgvfg2Hf_V9","2025-10-20":"1sEkiNog8J7v-tQWBpeoOqhcqjTh_Sh1z",
+"2025-10-17":"1wcCXFHh_fi_Z8Svw9rarcZHnx137r6Jg","2025-10-16":"12YgAT-1vUJA4kvYsndIezSQnPfxdK-4s",
+"2025-10-15":"12U-mdVHUSbPXxV1BizQ3T3ubxmWB8UyE","2025-10-14":"1b6T8FlIYhMrDyA_DP0rIOP-7WiXJLccU",
+"2025-10-13":"1tOWKmBoGU5aeq3kGrYQdJIYOHOxz6jwl","2025-10-10":"1ifULJw-D9hNUiREvUObE2vIvMhL6zQ4C",
+"2025-10-09":"1HyzYvyB3qFC9GQdgbjQu5rSOuwm7Ma0R","2025-10-08":"1H2gmLl6W0wzBEzWkBiJvbNZFxlRduMfG",
+"2025-10-07":"1uI0YomxBoYXMVT_Dw-z91pIlJwjQ3NXd","2025-10-06":"1ePoDeClw982HbhQ0sx5mTjpNF0g5ooK-",
+"2025-10-03":"13-gxyRPD2u-y3GW6JSepINoNc7IDeCZe","2025-10-02":"1RhYzAfy7t1aTnwJgo1a09j6eTjkwGTYY",
+"2025-10-01":"1U8lTgEC7JmUMdaT4B7y8GapomdeBPEH1","2025-09-30":"1aSowouHU6BSjPpBY1KuYcePRqeKF7O03",
+"2025-09-29":"1hfeqh1CMWw4naLE0ezFvt7fASgJ_D_mG","2025-09-26":"1YpML84o37op6Pj1LTLek2ZiK5zNwhM7b",
+"2025-09-25":"1nTXmouPLxmklhz7rwLc0RKXhMDeb7rJo","2025-09-24":"1xjsKt4lxtIXfAh0-TM7xP6r6qTFdf1ft",
+"2025-09-23":"1kPkBggMxLePKO7OdncA1ZLe1Zcf_6wZ1","2025-09-22":"1qyr-rEYDZTCDCjfkvlJvMPnJm_s6Xl8U",
+"2025-09-19":"1zMPnNnPiGJWl62nWk9cIyceaVPnIsSJR","2025-09-18":"1nOlKP4BIEoUtmBH5wWxdeKLA3hHOxxa-",
+"2025-09-17":"1vdpBKWEwJZQgmQZMRZN8dn730Jh-PavH","2025-09-16":"1cK-r7oRiuzCeqvb1X89KWJIK6FhxZ7yt",
+"2025-09-15":"1oJHszZrOoEwcpcur21KsjGlUkKmZOerm","2025-09-12":"1JIqmf7STXJuAMYZwBic9FF_YPXhizMpi",
+"2025-09-11":"1kHsRcutzStzhFGt5vx3qFkFn1BESrlFG","2025-09-10":"1uXoPxBC1gYxfkkaynZ9ASiseX2IYwfDO",
+"2025-09-09":"1fT6q7tdVq8yXM3JR7VdCHKs3Kgxk6N6L","2025-09-08":"1FTLQJXo8BkBaZWEvOYOwioWKrcv1Rzjd",
+"2025-09-05":"1cGNo4z8gixC7utNfiai8u9nRQtz4gIVU","2025-09-04":"1xzXAm_D_cZmB3Xm4D9soZhwyeWV3Njb5",
+"2025-09-03":"1rQzf6exOa05PifdbTFxEhGANvOhN5GGM","2025-09-02":"1-fLG_Zb2ZomerHN1x16xdYfjl9A1Cmoc",
+"2025-09-01":"1zXnTegLZE2v0Ztemd43h7ZFBlwDPBwAx","2025-08-29":"1dbjXOZkMLNPor7q3o4tAZ9JVAY_0aMHg",
+"2025-08-28":"1Gg7xcLa0qBHZGudyNkMGtIi_YgMJbBm7","2025-08-27":"1ksBw4u8ShuZUCQNAwhrq4vB4KCT3iRpe",
+"2025-08-26":"1zq4Wd7GkGr_V-fPublczeYswt5dfytJS","2025-08-25":"11D2BqCikZP0fp9NxgRt1Q37x7Y_D6h5h",
+"2025-08-22":"1dHYFu1RUy6hVgXmVqAIxt17OGERqKMJE","2025-08-21":"1dq0ntVhlJgCDNU74b_uI-UF-0GMmYaH6",
+"2025-08-20":"1Wa0kuhksWwUWDhj_4yHfvqHIBSaWxMKj","2025-08-19":"1CdYsDNfsmuns6S9I0VpcFTPxAf0HY-ka",
+"2025-08-18":"1FVdhQY-7XXPU-FjfOAr4PXl8dQy3hN6Q","2025-08-01":"1hxU37-q7rkZ9Ji99mcEP3hVQfF69Bs6L",
+"2025-03-28":"122UHpqRUNMO7EuRVpvm8x_9iVeW4XnVr","2025-02-10":"18UkytUWWp-GDi3DcdhFAdyq0gw_9WIHI",
+/* === fallback 2014 (low-beza references) === */
+"2014-08-29":"1EC6A-L9-Bu3BPGAIlkZr-_SFwzKrFQf5","2014-11-04":"1CHohTlZ1MDCg0GTJE5-gKIATbI5ZmSSb",
+"2014-11-26":"1bMxCcj_C7x_XAunAaPbx09dJykBkW8_d","2014-07-22":"1XyRFMuQguinYVed25o30_oDMOIaC7UJ4",
+"2014-07-10":"1wdJ016GY5jk3FqQt1B3lOE6R-w3ur425","2014-11-11":"1LI80T52SR1zhhRq8unbVhyGrFiTmOZx7",
+"2014-07-18":"1SXUecdvVM7Lia5MX-UrPtvWXK9cgFdJy","2014-08-06":"1RTwbuzv6b0qLH4gTqxsJhsSywIJswSt1",
+"2014-08-14":"1vk_oXxGVRlfrQQp7Rrz6JC4ubfcDupaK","2015-01-21":"11M8NfphnVeSrGURskLWwPCWykQ7EstKJ",
+"2014-08-19":"1LTWdIvGHvjsSqbeHW3AFXlvL_DvjTdD1","2014-07-30":"1a1wEho8Qgec0jukRotQQIlyFd9nw4WhK",
+"2014-08-21":"1Hblw7AKKqR4F5sbl0VA3vT0lqMga2oyV","2014-06-17":"1RUGVHFuvYDegQCoINaL74GJ37_FUugIH",
+"2014-07-25":"1DykmvpuWDRzv2_NQpcndS7DIvYMj_wBs",
+};
+
+/* ====== AUTO-LOAD DRIVE INDEX (guna API key) ====== */
+async function loadDriveIndex(){
+  if(!API_KEY){return;} // tiada key -> guna IMG terbina
+  let token="",pages=0,added=0;
+  const live={};
+  try{
+    do{
+      const q=encodeURIComponent(`'${FOLDER_ID}' in parents and mimeType contains 'image/'`);
+      let url=`https://www.googleapis.com/drive/v3/files?q=${q}&key=${API_KEY}`
+        +`&fields=nextPageToken,files(id,name)&pageSize=1000&supportsAllDrives=true`;
+      if(token) url+=`&pageToken=${token}`;
+      const r=await fetch(url);
+      if(!r.ok){throw new Error("HTTP "+r.status);}
+      const j=await r.json();
+      (j.files||[]).forEach(f=>{
+        const m=(f.name||"").match(/(\d{4}-\d{2}-\d{2})/);
+        if(m){ live[m[1]]=f.id; added++; }
+      });
+      token=j.nextPageToken||""; pages++;
+    }while(token && pages<10);
+    if(added>0){ IMG={...IMG,...live}; } // gabung: live override + kekal fallback
+    setStatus(`✅ ${Object.keys(bezaMap).length} beza · ${added} gambar auto-load`,"ok");
+  }catch(e){
+    setStatus("⚠️ Drive auto-load gagal (semak API Key / folder public). Guna index terbina.","err");
+  }
+  renderBuckets();
+  if(pickedDate) renderOwnImage(pickedDate);
+}
+
+let bezaMap={}; // YYYY-MM-DD -> beza
+let searchedBucket=null; // bucket key yang dihighlight
+let pickedDate=null;     // tarikh dipilih (YYYY-MM-DD)
+
+/* ====== LOAD SHEET ====== */
+async function loadSheet(){
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_TAB)}`;
+  try{
+    const res=await fetch(url);
+    const txt=await res.text();
+    const json=JSON.parse(txt.substring(txt.indexOf('{'),txt.lastIndexOf('}')+1));
+    let count=0;
+    json.table.rows.forEach(r=>{
+      const c=r.c; if(!c||!c[0]||!c[1])return;
+      const iso=parseDate(c[0].v,c[0].f);
+      const b=c[1].v;
+      if(iso&&b!==null&&b!==undefined){bezaMap[iso]=parseFloat(b);count++;}
+    });
+    setStatus(`✅ ${count} tarikh beza · live`,"ok");
+    renderBuckets();
+    if(pickedDate) renderOwnImage(pickedDate);
+  }catch(e){
+    setStatus("⚠️ Gagal sync (buka dari Netlify https, bukan file lokal)","err");
+    renderBuckets(); // tetap render fallback
+  }
+}
+/* ====== MOVEMENT 16:00-19:00 (data embedded + optional tab "Movement") ====== */
+const MV_DATA={"2020-01-02":"S-255","2020-01-03":"B+193","2020-01-06":"S-964","2020-01-07":"B+293","2020-01-08":"S-1767","2020-01-09":"S-33","2020-01-10":"B+1128","2020-01-13":"S-411","2020-01-14":"S-174","2020-01-15":"S-287","2020-01-16":"S-340","2020-01-17":"B+253","2020-01-20":"B+56","2020-01-21":"B+396","2020-01-22":"S-11","2020-01-23":"B+697","2020-01-24":"B+1104","2020-01-27":"B+119","2020-01-28":"S-665","2020-01-29":"B+80","2020-01-30":"B+260","2020-01-31":"B+335","2020-02-03":"S-34","2020-02-04":"S-782","2020-02-05":"B+366","2020-02-06":"B+178","2020-02-07":"S-126","2020-02-10":"B+173","2020-02-11":"S-568","2020-02-12":"B+276","2020-02-13":"B+155","2020-02-14":"B+135","2020-02-17":"B+6","2020-02-18":"B+1277","2020-02-19":"B+393","2020-02-20":"B+564","2020-02-21":"S-227","2020-02-24":"S-524","2020-02-25":"S-459","2020-02-26":"B+760","2020-02-27":"S-242","2020-02-28":"S-3902","2020-03-02":"B+63","2020-03-03":"B+3467","2020-03-04":"B+108","2020-03-05":"B+703","2020-03-06":"S-1010","2020-03-09":"S-16","2020-03-10":"B+72","2020-03-11":"S-1779","2020-03-12":"S-255","2020-03-13":"S-5219","2020-03-16":"B+4164","2020-03-17":"B+3396","2020-03-18":"S-2303","2020-03-19":"S-672","2020-03-20":"S-282","2020-03-23":"B+2102","2020-03-24":"B+2164","2020-03-25":"B+804","2020-03-26":"B+560","2020-03-27":"B+522","2020-03-30":"B+56","2020-03-31":"B+491","2020-04-01":"B+876","2020-04-02":"B+593","2020-04-03":"B+598","2020-04-06":"B+420","2020-04-07":"S-165","2020-04-08":"S-306","2020-04-09":"B+1088","2020-04-13":"B+1793","2020-04-14":"B+316","2020-04-15":"S-266","2020-04-16":"S-282","2020-04-17":"S-401","2020-04-20":"B+1441","2020-04-21":"B+1247","2020-04-22":"B+452","2020-04-23":"B+537","2020-04-24":"S-1890","2020-04-27":"S-876","2020-04-28":"S-631","2020-04-29":"S-235","2020-04-30":"S-1336","2020-05-01":"B+1543","2020-05-04":"B+647","2020-05-05":"B+601","2020-05-06":"S-743","2020-05-07":"B+1034","2020-05-08":"B+294","2020-05-11":"S-886","2020-05-12":"B+523","2020-05-13":"S-33","2020-05-14":"B+1697","2020-05-15":"B+604","2020-05-18":"S-1428","2020-05-19":"B+537","2020-05-20":"B+28","2020-05-21":"S-1274","2020-05-22":"S-323","2020-05-25":"B+118","2020-05-26":"S-1211","2020-05-27":"B+115","2020-05-28":"B+148","2020-05-29":"B+445","2020-06-01":"B+734","2020-06-02":"S-1160","2020-06-03":"S-921","2020-06-04":"S-288","2020-06-05":"S-910","2020-06-08":"B+17","2020-06-09":"S-18","2020-06-10":"S-486","2020-06-11":"B+312","2020-06-12":"S-334","2020-06-15":"B+1301","2020-06-16":"S-83","2020-06-17":"B+356","2020-06-18":"S-294","2020-06-19":"B+711","2020-06-22":"B+123","2020-06-23":"B+688","2020-06-24":"B+57","2020-06-25":"S-324","2020-06-26":"B+568","2020-06-29":"B+224","2020-06-30":"B+1366","2020-07-01":"S-1256","2020-07-02":"B+1790","2020-07-03":"S-44","2020-07-06":"B+29","2020-07-07":"B+1688","2020-07-08":"B+764","2020-07-09":"S-1025","2020-07-10":"S-947","2020-07-13":"S-41","2020-07-14":"B+579","2020-07-15":"B+360","2020-07-16":"B+137","2020-07-17":"B+485","2020-07-20":"B+230","2020-07-21":"B+24","2020-07-22":"B+880","2020-07-23":"B+2453","2020-07-24":"B+338","2020-07-27":"B+616","2020-07-28":"B+1434","2020-07-29":"S-170","2020-07-30":"S-480","2020-07-31":"S-41","2020-08-03":"B+89","2020-08-04":"B+2275","2020-08-05":"B+866","2020-08-06":"B+354","2020-08-07":"S-3247","2020-08-10":"B+198","2020-08-11":"S-2042","2020-08-12":"B+431","2020-08-13":"B+1344","2020-08-14":"S-205","2020-08-17":"B+2722","2020-08-18":"S-1109","2020-08-19":"S-2857","2020-08-20":"B+1241","2020-08-21":"B+39","2020-08-24":"S-1899","2020-08-25":"S-685","2020-08-26":"B+2882","2020-08-27":"S-1092","2020-08-28":"B+1314","2020-08-31":"B+146","2020-09-01":"S-1583","2020-09-02":"S-2095","2020-09-03":"S-773","2020-09-04":"S-658","2020-09-07":"B+174","2020-09-08":"B+1366","2020-09-09":"B+844","2020-09-10":"B+307","2020-09-11":"B+403","2020-09-14":"B+262","2020-09-15":"S-1543","2020-09-16":"S-72","2020-09-17":"B+30","2020-09-18":"B+129","2020-09-21":"S-2211","2020-09-22":"S-1256","2020-09-23":"S-1739","2020-09-24":"B+1584","2020-09-25":"S-78","2020-09-28":"B+482","2020-09-29":"B+592","2020-09-30":"B+89","2020-10-01":"B+681","2020-10-02":"S-1107","2020-10-05":"B+692","2020-10-06":"S-1368","2020-10-07":"S-413","2020-10-08":"S-938","2020-10-09":"S-21","2020-10-12":"S-213","2020-10-13":"S-1487","2020-10-14":"S-461","2020-10-15":"B+831","2020-10-16":"S-548","2020-10-19":"S-366","2020-10-20":"B+579","2020-10-21":"B+36","2020-10-22":"S-553","2020-10-23":"S-1169","2020-10-26":"S-104","2020-10-27":"B+278","2020-10-28":"B+429","2020-10-29":"S-362","2020-10-30":"S-363","2020-11-02":"B+333","2020-11-04":"S-419","2020-11-05":"B+1485","2020-11-06":"S-659","2020-11-09":"S-2180","2020-11-10":"B+417","2020-11-11":"B+602","2020-11-12":"B+307","2020-11-13":"S-373","2020-11-16":"B+929","2020-11-17":"S-544","2020-11-18":"B+417","2020-11-19":"S-102","2020-11-20":"B+530","2020-11-23":"S-2793","2020-11-24":"S-248","2020-11-25":"S-417","2020-11-26":"S-523","2020-11-27":"B+614","2020-11-30":"B+916","2020-12-01":"S-225","2020-12-02":"B+1100","2020-12-03":"S-180","2020-12-04":"S-499","2020-12-07":"B+2495","2020-12-08":"B+466","2020-12-09":"S-1610","2020-12-10":"S-821","2020-12-11":"B+271","2020-12-14":"S-720","2020-12-15":"S-366","2020-12-16":"B+261","2020-12-17":"S-333","2020-12-18":"S-112","2020-12-21":"S-186","2020-12-22":"S-1382","2020-12-23":"B+603","2020-12-24":"B+545","2020-12-28":"S-805","2020-12-29":"B+112","2020-12-30":"B+317","2020-12-31":"S-261","2021-01-04":"B+15","2021-01-05":"B+106","2021-01-06":"S-2489","2021-01-07":"S-6","2021-01-08":"S-3529","2021-01-11":"B+1446","2021-01-12":"S-93","2021-01-13":"S-61","2021-01-14":"B+447","2021-01-15":"S-729","2021-01-18":"B+277","2021-01-19":"B+125","2021-01-20":"B+1796","2021-01-21":"B+271","2021-01-22":"B+1177","2021-01-25":"S-989","2021-01-26":"S-486","2021-01-27":"B+206","2021-01-28":"S-1112","2021-01-29":"S-1415","2021-02-01":"S-160","2021-02-02":"S-64","2021-02-03":"S-226","2021-02-04":"S-1592","2021-02-05":"B+1276","2021-02-08":"B+782","2021-02-09":"S-1126","2021-02-10":"S-1041","2021-02-11":"S-1334","2021-02-12":"B+879","2021-02-15":"B+205","2021-02-16":"S-9","2021-02-17":"S-115","2021-02-18":"S-947","2021-02-19":"S-8","2021-02-22":"B+1408","2021-02-23":"S-247","2021-02-24":"B+1162","2021-02-25":"S-73","2021-02-26":"S-4360","2021-03-01":"S-399","2021-03-02":"B+397","2021-03-03":"B+618","2021-03-04":"S-111","2021-03-05":"B+381","2021-03-08":"S-1412","2021-03-09":"B+214","2021-03-10":"S-50","2021-03-11":"S-557","2021-03-12":"B+1303","2021-03-15":"S-471","2021-03-16":"S-387","2021-03-17":"S-51","2021-03-18":"B+785","2021-03-19":"B+622","2021-03-22":"B+700","2021-03-23":"S-389","2021-03-24":"B+377","2021-03-25":"S-1071","2021-03-26":"B+367","2021-03-29":"S-1221","2021-03-30":"B+316","2021-03-31":"B+2060","2021-04-01":"B+973","2021-04-05":"B+720","2021-04-06":"B+928","2021-04-07":"B+347","2021-04-08":"B+805","2021-04-09":"B+641","2021-04-12":"S-676","2021-04-13":"B+744","2021-04-14":"S-779","2021-04-15":"B+1957","2021-04-16":"S-204","2021-04-19":"S-376","2021-04-20":"B+916","2021-04-21":"B+669","2021-04-22":"S-456","2021-04-23":"S-1712","2021-04-26":"B+225","2021-04-27":"S-491","2021-04-28":"B+489","2021-04-29":"S-1312","2021-04-30":"S-238","2021-05-03":"B+793","2021-05-04":"S-1274","2021-05-05":"B+226","2021-05-06":"B+2053","2021-05-07":"S-356","2021-05-10":"S-29","2021-05-11":"B+675","2021-05-12":"S-1559","2021-05-13":"B+845","2021-05-14":"B+257","2021-05-17":"B+2058","2021-05-18":"S-642","2021-05-19":"B+1274","2021-05-20":"B+859","2021-05-21":"S-1173","2021-05-24":"B+461","2021-05-25":"B+882","2021-05-26":"S-545","2021-05-27":"S-402","2021-05-28":"B+268","2021-05-31":"S-13","2021-06-01":"S-1045","2021-06-02":"B+86","2021-06-03":"S-1283","2021-06-04":"B+854","2021-06-07":"B+692","2021-06-08":"S-187","2021-06-09":"S-218","2021-06-10":"B+289","2021-06-11":"S-382","2021-06-14":"B+1590","2021-06-15":"S-968","2021-06-16":"B+207","2021-06-17":"S-938","2021-06-18":"S-304","2021-06-21":"B+844","2021-06-22":"B+198","2021-06-23":"B+431","2021-06-24":"S-490","2021-06-25":"S-633","2021-06-28":"B+331","2021-06-29":"B+795","2021-06-30":"B+827","2021-07-01":"S-669","2021-07-02":"S-678","2021-07-05":"S-95","2021-07-06":"S-1259","2021-07-07":"S-96","2021-07-08":"S-1682","2021-07-09":"B+551","2021-07-12":"B+237","2021-07-13":"B+1284","2021-07-14":"S-616","2021-07-15":"B+216","2021-07-16":"S-996","2021-07-19":"S-68","2021-07-20":"S-1529","2021-07-21":"B+519","2021-07-22":"B+437","2021-07-23":"S-35","2021-07-26":"S-369","2021-07-27":"S-422","2021-07-28":"B+210","2021-07-29":"B+542","2021-07-30":"S-16","2021-08-02":"B+754","2021-08-03":"S-360","2021-08-04":"S-1559","2021-08-05":"S-512","2021-08-06":"S-1450","2021-08-09":"S-1012","2021-08-10":"B+368","2021-08-11":"B+694","2021-08-12":"B+250","2021-08-13":"B+1390","2021-08-16":"B+784","2021-08-17":"S-669","2021-08-18":"S-464","2021-08-19":"S-564","2021-08-20":"B+267","2021-08-23":"B+472","2021-08-24":"S-114","2021-08-25":"S-687","2021-08-26":"B+864","2021-08-27":"B+1409","2021-08-30":"S-437","2021-08-31":"S-152","2021-09-01":"S-388","2021-09-02":"S-465","2021-09-03":"B+567","2021-09-06":"S-68","2021-09-07":"S-1144","2021-09-08":"S-481","2021-09-09":"B+6","2021-09-10":"S-79","2021-09-13":"B+930","2021-09-14":"B+873","2021-09-15":"S-278","2021-09-16":"S-779","2021-09-17":"S-37","2021-09-20":"B+214","2021-09-21":"B+558","2021-09-22":"B+506","2021-09-23":"S-1192","2021-09-24":"B+733","2021-09-27":"S-276","2021-09-28":"B+623","2021-09-29":"S-762","2021-09-30":"B+2076","2021-10-01":"B+480","2021-10-04":"B+1026","2021-10-05":"B+417","2021-10-06":"B+268","2021-10-07":"B+329","2021-10-08":"S-1735","2021-10-11":"B+677","2021-10-12":"B+311","2021-10-13":"B+3334","2021-10-14":"S-88","2021-10-15":"B+98","2021-10-18":"B+281","2021-10-19":"S-1042","2021-10-20":"S-298","2021-10-21":"S-37","2021-10-22":"S-2000","2021-10-25":"B+484","2021-10-26":"S-952","2021-10-27":"B+41","2021-10-28":"B+192","2021-10-29":"S-201","2021-11-01":"S-13","2021-11-02":"S-242","2021-11-03":"S-464","2021-11-04":"S-337","2021-11-05":"B+1468","2021-11-08":"B+221","2021-11-09":"S-156","2021-11-10":"B+532","2021-11-11":"S-110","2021-11-12":"B+918","2021-11-15":"S-93","2021-11-16":"S-1164","2021-11-17":"B+412","2021-11-18":"S-255","2021-11-19":"S-354","2021-11-22":"S-2226","2021-11-23":"S-339","2021-11-24":"B+443","2021-11-25":"S-158","2021-11-26":"S-2033","2021-11-29":"S-307","2021-11-30":"S-2140","2021-12-01":"S-226","2021-12-02":"S-772","2021-12-03":"B+1050","2021-12-06":"B+549","2021-12-07":"B+1046","2021-12-08":"S-76","2021-12-09":"S-127","2021-12-10":"B+49","2021-12-13":"B+545","2021-12-14":"B+128","2021-12-15":"S-394","2021-12-16":"B+951","2021-12-17":"S-77","2021-12-20":"S-44","2021-12-21":"S-962","2021-12-22":"B+391","2021-12-23":"B+14","2021-12-27":"B+267","2021-12-28":"S-718","2021-12-29":"B+1265","2021-12-30":"B+1070","2021-12-31":"B+96","2022-01-03":"S-639","2022-01-04":"B+528","2022-01-05":"S-170","2022-01-06":"B+87","2022-01-07":"B+473","2022-01-10":"B+90","2022-01-11":"B+948","2022-01-12":"B+365","2022-01-13":"S-295","2022-01-14":"S-672","2022-01-17":"S-158","2022-01-18":"S-447","2022-01-19":"B+1621","2022-01-20":"S-466","2022-01-21":"S-643","2022-01-24":"S-37","2022-01-25":"B+664","2022-01-26":"S-1220","2022-01-27":"S-653","2022-01-28":"S-109","2022-01-31":"S-50","2022-02-01":"S-45","2022-02-02":"B+782","2022-02-03":"B+434","2022-02-04":"B+1146","2022-02-07":"B+339","2022-02-08":"B+232","2022-02-09":"B+656","2022-02-10":"B+1114","2022-02-11":"B+943","2022-02-14":"B+41","2022-02-15":"B+206","2022-02-16":"B+650","2022-02-17":"S-34","2022-02-18":"S-49","2022-02-21":"B+63","2022-02-22":"B+113","2022-02-23":"B+725","2022-02-24":"S-3751","2022-02-25":"S-303","2022-02-28":"S-2439","2022-03-01":"B+1463","2022-03-02":"S-1319","2022-03-03":"B+439","2022-03-04":"B+1580","2022-03-07":"B+35","2022-03-08":"B+5447","2022-03-09":"B+1128","2022-03-10":"S-144","2022-03-11":"B+2379","2022-03-14":"B+222","2022-03-15":"B+645","2022-03-16":"S-555","2022-03-17":"S-74","2022-03-18":"S-517","2022-03-21":"B+67","2022-03-22":"S-341","2022-03-23":"B+26","2022-03-24":"B+933","2022-03-25":"B+742","2022-03-28":"S-165","2022-03-29":"B+1817","2022-03-30":"B+983","2022-03-31":"B+1023","2022-04-01":"S-114","2022-04-04":"B+206","2022-04-05":"S-1418","2022-04-06":"B+141","2022-04-07":"B+615","2022-04-08":"B+1033","2022-04-11":"S-1195","2022-04-12":"B+25","2022-04-13":"B+342","2022-04-14":"S-566","2022-04-18":"S-590","2022-04-19":"S-1069","2022-04-20":"B+103","2022-04-21":"S-775","2022-04-22":"B+207","2022-04-25":"B+112","2022-04-26":"B+4","2022-04-27":"S-1159","2022-04-28":"B+37","2022-04-29":"S-118","2022-05-02":"B+868","2022-05-03":"B+843","2022-05-04":"B+92","2022-05-05":"S-3193","2022-05-06":"B+990","2022-05-09":"S-310","2022-05-10":"S-1791","2022-05-11":"B+1276","2022-05-12":"S-959","2022-05-13":"S-121","2022-05-16":"B+558","2022-05-17":"S-1361","2022-05-18":"B+1217","2022-05-19":"B+413","2022-05-20":"B+27","2022-05-23":"S-378","2022-05-24":"B+919","2022-05-25":"S-669","2022-05-26":"B+316","2022-05-27":"S-104","2022-05-30":"B+38","2022-05-31":"S-535","2022-06-01":"B+141","2022-06-02":"B+1143","2022-06-03":"S-648","2022-06-06":"S-999","2022-06-07":"B+639","2022-06-08":"B+638","2022-06-09":"S-473","2022-06-10":"B+2910","2022-06-13":"S-1395","2022-06-14":"S-957","2022-06-15":"S-1041","2022-06-16":"B+1586","2022-06-17":"S-1016","2022-06-20":"S-75","2022-06-21":"S-85","2022-06-22":"S-664","2022-06-23":"S-80","2022-06-24":"B+500","2022-06-27":"S-668","2022-06-28":"S-175","2022-06-29":"S-1274","2022-06-30":"S-822","2022-07-01":"B+1649","2022-07-04":"S-132","2022-07-05":"S-3152","2022-07-06":"S-3144","2022-07-07":"B+14","2022-07-08":"B+385","2022-07-11":"B+115","2022-07-12":"S-17","2022-07-13":"B+2465","2022-07-14":"B+228","2022-07-15":"S-287","2022-07-18":"S-669","2022-07-19":"B+556","2022-07-20":"S-74","2022-07-21":"B+645","2022-07-22":"B+697","2022-07-25":"S-823","2022-07-26":"S-220","2022-07-27":"B+67","2022-07-28":"B+836","2022-07-29":"B+859","2022-08-01":"S-57","2022-08-02":"S-705","2022-08-03":"S-1344","2022-08-04":"B+699","2022-08-05":"B+474","2022-08-08":"B+533","2022-08-09":"B+230","2022-08-10":"B+75","2022-08-11":"S-636","2022-08-12":"B+155","2022-08-15":"B+86","2022-08-16":"B+258","2022-08-17":"S-945","2022-08-18":"S-746","2022-08-19":"S-733","2022-08-22":"B+632","2022-08-23":"B+1366","2022-08-24":"B+536","2022-08-25":"S-480","2022-08-26":"S-872","2022-08-29":"B+419","2022-08-30":"S-445","2022-08-31":"B+707","2022-09-01":"S-562","2022-09-02":"B+732","2022-09-05":"S-219","2022-09-06":"S-482","2022-09-07":"B+1029","2022-09-08":"S-851","2022-09-09":"S-201","2022-09-12":"B+440","2022-09-13":"S-284","2022-09-14":"S-222","2022-09-15":"S-2311","2022-09-16":"B+1360","2022-09-19":"B+580","2022-09-20":"S-224","2022-09-21":"S-660","2022-09-22":"S-1040","2022-09-23":"B+7","2022-09-26":"S-1157","2022-09-27":"S-126","2022-09-28":"B+2358","2022-09-29":"B+1059","2022-09-30":"B+676","2022-10-03":"B+2484","2022-10-04":"B+1382","2022-10-05":"S-412","2022-10-06":"S-720","2022-10-07":"B+533","2022-10-10":"S-1025","2022-10-11":"B+1199","2022-10-12":"S-208","2022-10-13":"B+1109","2022-10-14":"S-1851","2022-10-17":"S-331","2022-10-18":"S-669","2022-10-19":"S-433","2022-10-20":"B+873","2022-10-21":"B+1958","2022-10-24":"B+262","2022-10-25":"B+1379","2022-10-26":"B+522","2022-10-27":"B+114","2022-10-28":"S-371","2022-10-31":"S-79","2022-11-01":"S-524","2022-11-02":"S-574","2022-11-03":"B+770","2022-11-04":"B+589","2022-11-07":"B+68","2022-11-08":"B+4222","2022-11-09":"B+236","2022-11-10":"B+1683","2022-11-11":"S-179","2022-11-14":"B+596","2022-11-15":"S-652","2022-11-16":"S-463","2022-11-17":"B+153","2022-11-18":"S-599","2022-11-21":"S-1052","2022-11-22":"S-179","2022-11-23":"B+548","2022-11-24":"S-13","2022-11-25":"B+300","2022-11-28":"S-831","2022-11-29":"S-2","2022-11-30":"S-295","2022-12-01":"B+1292","2022-12-02":"B+1001","2022-12-05":"S-1924","2022-12-06":"S-624","2022-12-07":"B+392","2022-12-08":"B+36","2022-12-09":"B+670","2022-12-12":"S-309","2022-12-13":"S-207","2022-12-14":"B+212","2022-12-15":"B+186","2022-12-16":"B+303","2022-12-19":"S-340","2022-12-20":"B+1235","2022-12-21":"S-122","2022-12-22":"S-1235","2022-12-23":"B+632","2022-12-27":"B+1440","2022-12-28":"S-131","2022-12-29":"B+533","2022-12-30":"S-556","2023-01-03":"S-468","2023-01-04":"S-145","2023-01-05":"S-406","2023-01-06":"B+1162","2023-01-09":"S-201","2023-01-10":"S-180","2023-01-11":"S-452","2023-01-12":"S-702","2023-01-13":"B+1218","2023-01-16":"B+26","2023-01-17":"S-88","2023-01-18":"S-1288","2023-01-19":"B+753","2023-01-20":"B+70","2023-01-23":"B+40","2023-01-24":"B+3","2023-01-25":"B+1447","2023-01-26":"S-1178","2023-01-27":"B+85","2023-01-30":"S-487","2023-01-31":"B+772","2023-02-01":"S-422","2023-02-02":"S-2566","2023-02-03":"S-1840","2023-02-06":"S-517","2023-02-07":"B+473","2023-02-08":"S-220","2023-02-09":"S-1537","2023-02-10":"S-884","2023-02-13":"S-563","2023-02-14":"S-1300","2023-02-15":"B+196","2023-02-16":"B+1004","2023-02-17":"B+1205","2023-02-20":"S-356","2023-02-21":"S-381","2023-02-22":"S-545","2023-02-23":"S-553","2023-02-24":"S-353","2023-02-27":"B+178","2023-02-28":"B+1258","2023-03-01":"B+429","2023-03-02":"B+387","2023-03-03":"B+83","2023-03-06":"B+13","2023-03-07":"S-1550","2023-03-08":"B+413","2023-03-09":"B+84","2023-03-10":"B+1289","2023-03-13":"B+1246","2023-03-14":"B+639","2023-03-15":"B+747","2023-03-16":"S-896","2023-03-17":"B+1105","2023-03-20":"S-324","2023-03-21":"S-851","2023-03-22":"B+621","2023-03-23":"B+1002","2023-03-24":"S-273","2023-03-27":"B+1100","2023-03-28":"B+132","2023-03-29":"S-309","2023-03-30":"B+448","2023-03-31":"B+7","2023-04-03":"B+870","2023-04-04":"B+3658","2023-04-05":"S-987","2023-04-06":"S-169","2023-04-10":"S-85","2023-04-11":"B+558","2023-04-12":"S-1641","2023-04-13":"S-621","2023-04-14":"S-2903","2023-04-17":"S-1068","2023-04-18":"B+719","2023-04-19":"B+1054","2023-04-20":"S-430","2023-04-21":"S-1312","2023-04-24":"B+85","2023-04-25":"S-299","2023-04-26":"S-659","2023-04-27":"S-365","2023-04-28":"B+753","2023-05-01":"S-2102","2023-05-02":"B+2876","2023-05-03":"B+983","2023-05-04":"B+1400","2023-05-05":"B+474","2023-05-08":"B+105","2023-05-09":"S-18","2023-05-10":"S-2062","2023-05-11":"S-2380","2023-05-12":"S-465","2023-05-15":"B+61","2023-05-16":"S-1600","2023-05-17":"S-446","2023-05-18":"S-1099","2023-05-19":"B+1391","2023-05-22":"S-302","2023-05-23":"B+850","2023-05-24":"S-1679","2023-05-25":"B+184","2023-05-26":"S-391","2023-05-29":"S-293","2023-05-30":"B+559","2023-05-31":"B+586","2023-06-01":"B+1370","2023-06-02":"S-898","2023-06-05":"B+1524","2023-06-06":"B+160","2023-06-07":"S-1135","2023-06-08":"B+752","2023-06-09":"S-73","2023-06-12":"S-742","2023-06-13":"S-1823","2023-06-14":"S-124","2023-06-15":"B+2309","2023-06-16":"S-640","2023-06-19":"S-148","2023-06-20":"S-949","2023-06-21":"B+232","2023-06-22":"S-998","2023-06-23":"S-788","2023-06-26":"S-573","2023-06-27":"S-1275","2023-06-28":"B+397","2023-06-29":"B+1278","2023-06-30":"B+808","2023-07-03":"B+462","2023-07-04":"B+34","2023-07-05":"S-613","2023-07-06":"B+516","2023-07-07":"B+881","2023-07-10":"B+954","2023-07-11":"S-96","2023-07-12":"B+1250","2023-07-13":"S-255","2023-07-14":"B+66","2023-07-17":"B+597","2023-07-18":"B+933","2023-07-19":"S-368","2023-07-20":"S-532","2023-07-21":"S-285","2023-07-24":"S-776","2023-07-25":"B+488","2023-07-26":"B+14","2023-07-27":"S-1331","2023-07-28":"B+536","2023-07-31":"B+527","2023-08-01":"S-252","2023-08-02":"S-1000","2023-08-03":"B+12","2023-08-04":"B+378","2023-08-07":"S-552","2023-08-08":"B+51","2023-08-09":"S-819","2023-08-10":"S-627","2023-08-11":"S-199","2023-08-14":"B+28","2023-08-15":"B+339","2023-08-16":"B+111","2023-08-17":"S-1006","2023-08-18":"B+98","2023-08-21":"S-798","2023-08-22":"B+38","2023-08-23":"B+1455","2023-08-24":"B+594","2023-08-25":"S-950","2023-08-28":"B+763","2023-08-29":"B+1965","2023-08-30":"S-16","2023-08-31":"S-518","2023-09-01":"S-1115","2023-09-04":"S-135","2023-09-05":"S-771","2023-09-06":"S-643","2023-09-07":"S-234","2023-09-08":"S-85","2023-09-11":"S-420","2023-09-12":"B+275","2023-09-13":"S-189","2023-09-14":"B+357","2023-09-15":"B+930","2023-09-18":"B+497","2023-09-19":"S-272","2023-09-20":"B+967","2023-09-21":"B+100","2023-09-22":"B+161","2023-09-25":"S-835","2023-09-26":"S-787","2023-09-27":"S-1028","2023-09-28":"S-765","2023-09-29":"S-1909","2023-10-02":"S-387","2023-10-03":"B+1","2023-10-04":"S-352","2023-10-05":"S-16","2023-10-06":"B+1753","2023-10-09":"B+364","2023-10-10":"B+676","2023-10-11":"B+14","2023-10-12":"S-666","2023-10-13":"B+961","2023-10-16":"B+275","2023-10-17":"B+86","2023-10-18":"S-370","2023-10-19":"B+135","2023-10-20":"B+1326","2023-10-23":"S-223","2023-10-24":"B+486","2023-10-25":"B+607","2023-10-26":"B+68","2023-10-27":"S-52","2023-10-30":"B+44","2023-10-31":"S-1166","2023-11-01":"S-1081","2023-11-02":"S-209","2023-11-03":"S-481","2023-11-06":"S-290","2023-11-07":"S-189","2023-11-08":"S-999","2023-11-09":"B+1002","2023-11-10":"S-667","2023-11-13":"B+982","2023-11-14":"B+989","2023-11-15":"S-327","2023-11-16":"B+992","2023-11-17":"S-365","2023-11-20":"B+632","2023-11-21":"B+337","2023-11-22":"S-809","2023-11-23":"S-220","2023-11-24":"B+31","2023-11-27":"S-50","2023-11-28":"B+1819","2023-11-29":"B+306","2023-11-30":"B+276","2023-12-01":"B+2109","2023-12-04":"S-3165","2023-12-05":"S-1468","2023-12-06":"S-30","2023-12-07":"S-1072","2023-12-08":"S-1639","2023-12-11":"S-1231","2023-12-12":"S-353","2023-12-13":"S-299","2023-12-14":"B+223","2023-12-15":"B+244","2023-12-18":"S-364","2023-12-19":"B+1434","2023-12-20":"S-168","2023-12-21":"B+31","2023-12-22":"S-1395","2023-12-26":"B+84","2023-12-27":"B+1327","2023-12-28":"B+114","2023-12-29":"B+698","2024-01-02":"S-32","2024-01-03":"S-865","2024-01-04":"B+444","2024-01-05":"B+510","2024-01-08":"B+1324","2024-01-09":"S-740","2024-01-10":"S-322","2024-01-11":"S-1284","2024-01-12":"S-788","2024-01-15":"S-20","2024-01-16":"S-408","2024-01-17":"S-1691","2024-01-18":"B+577","2024-01-19":"S-1047","2024-01-22":"B+49","2024-01-23":"B+85","2024-01-24":"S-1863","2024-01-25":"S-480","2024-01-26":"S-645","2024-01-29":"S-980","2024-01-30":"S-179","2024-01-31":"B+810","2024-02-01":"B+1931","2024-02-02":"B+455","2024-02-05":"B+628","2024-02-06":"B+745","2024-02-07":"B+224","2024-02-08":"B+1104","2024-02-09":"S-551","2024-02-12":"S-316","2024-02-13":"S-943","2024-02-14":"B+403","2024-02-15":"S-360","2024-02-16":"B+776","2024-02-19":"S-57","2024-02-20":"S-316","2024-02-21":"S-479","2024-02-22":"S-468","2024-02-23":"B+1312","2024-02-26":"S-478","2024-02-27":"S-229","2024-02-28":"S-224","2024-02-29":"S-266","2024-03-01":"B+2951","2024-03-04":"B+2761","2024-03-05":"B+55","2024-03-06":"B+884","2024-03-07":"S-330","2024-03-08":"B+966","2024-03-11":"S-96","2024-03-12":"B+537","2024-03-13":"B+757","2024-03-14":"S-375","2024-03-15":"S-128","2024-03-18":"B+329","2024-03-19":"B+326","2024-03-20":"S-24","2024-03-21":"S-1139","2024-03-22":"S-1552","2024-03-25":"S-138","2024-03-26":"S-618","2024-03-27":"S-84","2024-03-28":"B+1375","2024-04-01":"S-1287","2024-04-02":"B+106","2024-04-03":"B+1143","2024-04-04":"B+382","2024-04-05":"B+3522","2024-04-08":"S-118","2024-04-09":"S-902","2024-04-10":"S-136","2024-04-11":"B+343","2024-04-12":"S-29","2024-04-15":"S-575","2024-04-16":"B+971","2024-04-17":"S-108","2024-04-18":"S-134","2024-04-19":"B+1336","2024-04-22":"S-206","2024-04-23":"B+1135","2024-04-24":"S-68","2024-04-25":"S-39","2024-04-26":"S-815","2024-04-29":"B+591","2024-04-30":"S-1021","2024-05-01":"B+898","2024-05-02":"B+549","2024-05-03":"S-1103","2024-05-06":"B+151","2024-05-07":"S-129","2024-05-08":"B+579","2024-05-09":"B+369","2024-05-10":"S-1","2024-05-13":"S-1112","2024-05-14":"S-35","2024-05-15":"B+506","2024-05-16":"B+238","2024-05-17":"B+1450","2024-05-20":"B+1116","2024-05-21":"S-285","2024-05-22":"S-2032","2024-05-23":"S-1659","2024-05-24":"S-473","2024-05-27":"B+515","2024-05-28":"B+707","2024-05-29":"B+145","2024-05-30":"B+248","2024-05-31":"S-2472","2024-06-03":"B+883","2024-06-04":"S-905","2024-06-05":"B+1153","2024-06-06":"B+1654","2024-06-07":"S-1427","2024-06-10":"B+121","2024-06-11":"S-778","2024-06-12":"S-37","2024-06-13":"S-2437","2024-06-14":"S-420","2024-06-17":"S-708","2024-06-18":"B+1292","2024-06-19":"B+155","2024-06-20":"B+1510","2024-06-21":"S-3269","2024-06-24":"B+3","2024-06-25":"B+52","2024-06-26":"S-1003","2024-06-27":"B+467","2024-06-28":"S-685","2024-07-01":"B+34","2024-07-02":"S-270","2024-07-03":"B+1265","2024-07-04":"S-43","2024-07-05":"B+1258","2024-07-08":"S-1726","2024-07-09":"B+191","2024-07-10":"B+101","2024-07-11":"B+1106","2024-07-12":"B+1381","2024-07-15":"B+1851","2024-07-16":"B+3056","2024-07-17":"S-995","2024-07-18":"S-269","2024-07-19":"B+164","2024-07-22":"S-804","2024-07-23":"S-2","2024-07-24":"B+332","2024-07-25":"S-806","2024-07-26":"B+760","2024-07-29":"S-1703","2024-07-30":"S-119","2024-07-31":"B+266","2024-08-01":"S-553","2024-08-02":"S-3965","2024-08-05":"B+2821","2024-08-06":"S-548","2024-08-07":"S-934","2024-08-08":"B+1060","2024-08-09":"B+192","2024-08-12":"B+1534","2024-08-13":"B+98","2024-08-14":"S-2475","2024-08-15":"B+1721","2024-08-16":"B+14","2024-08-19":"B+1282","2024-08-20":"S-1822","2024-08-21":"S-213","2024-08-22":"S-1876","2024-08-23":"B+849","2024-08-26":"S-802","2024-08-27":"B+232","2024-08-28":"B+552","2024-08-29":"B+1337","2024-08-30":"S-1714","2024-09-02":"B+29","2024-09-03":"S-482","2024-09-04":"B+750","2024-09-05":"S-1064","2024-09-06":"S-1678","2024-09-09":"S-179","2024-09-10":"S-117","2024-09-11":"B+671","2024-09-12":"B+2473","2024-09-13":"B+634","2024-09-16":"S-355","2024-09-17":"S-1239","2024-09-18":"S-654","2024-09-19":"B+1236","2024-09-20":"B+729","2024-09-23":"B+224","2024-09-24":"B+994","2024-09-25":"S-167","2024-09-26":"S-586","2024-09-27":"S-2020","2024-09-30":"S-513","2024-10-01":"B+1191","2024-10-02":"B+37","2024-10-03":"B+653","2024-10-04":"B+1439","2024-10-07":"B+572","2024-10-08":"S-3292","2024-10-09":"S-410","2024-10-10":"S-140","2024-10-11":"B+1563","2024-10-14":"S-460","2024-10-15":"B+1643","2024-10-16":"S-1180","2024-10-17":"B+1272","2024-10-18":"B+529","2024-10-21":"S-1857","2024-10-22":"B+140","2024-10-23":"S-2155","2024-10-24":"S-800","2024-10-25":"B+552","2024-10-28":"B+193","2024-10-29":"B+891","2024-10-30":"B+788","2024-10-31":"S-1459","2024-11-01":"S-1343","2024-11-04":"S-1255","2024-11-05":"S-578","2024-11-06":"B+218","2024-11-07":"B+1126","2024-11-08":"S-1426","2024-11-11":"S-2040","2024-11-12":"S-1090","2024-11-13":"S-2640","2024-11-14":"B+1686","2024-11-15":"S-315","2024-11-18":"B+761","2024-11-19":"S-864","2024-11-20":"B+1454","2024-11-21":"S-83","2024-11-22":"B+1226","2024-11-25":"S-4622","2024-11-26":"S-118","2024-11-27":"S-1734","2024-11-28":"S-500","2024-11-29":"B+415","2024-12-02":"S-565","2024-12-03":"S-453","2024-12-04":"B+125","2024-12-05":"S-1382","2024-12-06":"B+469","2024-12-09":"B+210","2024-12-10":"B+1174","2024-12-11":"B+1413","2024-12-12":"S-1398","2024-12-13":"B+4","2024-12-16":"S-989","2024-12-17":"B+183","2024-12-18":"S-920","2024-12-19":"S-455","2024-12-20":"B+1582","2024-12-23":"S-143","2024-12-24":"B+175","2024-12-26":"B+892","2024-12-27":"S-80","2024-12-30":"S-692","2024-12-31":"B+1208","2025-01-02":"B+1629","2025-01-03":"S-985","2025-01-06":"B+1667","2025-01-07":"S-1083","2025-01-08":"B+944","2025-01-09":"S-503","2025-01-10":"B+1369","2025-01-13":"S-787","2025-01-14":"B+882","2025-01-15":"S-447","2025-01-16":"B+509","2025-01-17":"B+1114","2025-01-20":"B+255","2025-01-21":"B+1690","2025-01-22":"B+47","2025-01-23":"B+1231","2025-01-24":"S-1039","2025-01-27":"S-2276","2025-01-28":"B+987","2025-01-29":"S-717","2025-01-30":"B+474","2025-01-31":"B+95","2025-02-03":"B+318","2025-02-04":"B+879","2025-02-05":"B+1306","2025-02-06":"S-791","2025-02-07":"S-192","2025-02-10":"S-19","2025-02-11":"B+586","2025-02-12":"B+1769","2025-02-13":"B+534","2025-02-14":"S-2472","2025-02-17":"B+245","2025-02-18":"B+1413","2025-02-19":"S-818","2025-02-20":"B+911","2025-02-21":"B+580","2025-02-24":"S-1089","2025-02-25":"S-4099","2025-02-26":"B+723","2025-02-27":"S-1143","2025-02-28":"B+2","2025-03-03":"B+1899","2025-03-04":"S-752","2025-03-05":"B+2385","2025-03-06":"B+1275","2025-03-07":"B+31","2025-03-10":"S-768","2025-03-11":"S-52","2025-03-12":"B+2073","2025-03-13":"B+2962","2025-03-14":"B+513","2025-03-17":"B+609","2025-03-18":"B+271","2025-03-19":"S-24","2025-03-20":"B+547","2025-03-21":"B+874","2025-03-24":"S-1284","2025-03-25":"S-525","2025-03-26":"S-100","2025-03-27":"B+763","2025-03-28":"B+72","2025-03-31":"S-1058","2025-04-01":"S-1959","2025-04-02":"B+342","2025-04-03":"B+3432","2025-04-04":"S-4936","2025-04-07":"S-4371","2025-04-08":"S-105","2025-04-09":"B+3884","2025-04-10":"B+3488","2025-04-11":"B+700","2025-04-14":"S-864","2025-04-15":"S-19","2025-04-16":"B+1800","2025-04-17":"S-3212","2025-04-21":"B+796","2025-04-22":"S-1355","2025-04-23":"S-3035","2025-04-24":"S-644","2025-04-25":"S-971","2025-04-28":"B+2901","2025-04-29":"S-22","2025-04-30":"B+942","2025-05-01":"S-1022","2025-05-02":"S-1880","2025-05-05":"S-755","2025-05-06":"B+385","2025-05-07":"S-567","2025-05-08":"S-2580","2025-05-09":"B+1153","2025-05-12":"B+552","2025-05-13":"B+1171","2025-05-14":"S-221","2025-05-15":"B+3094","2025-05-16":"B+613","2025-05-19":"B+228","2025-05-20":"B+3434","2025-05-21":"B+933","2025-05-22":"S-947","2025-05-23":"B+444","2025-05-26":"B+361","2025-05-27":"S-16","2025-05-28":"S-1629","2025-05-29":"B+523","2025-05-30":"S-1540","2025-06-02":"B+1884","2025-06-03":"S-905","2025-06-04":"B+1286","2025-06-05":"S-3836","2025-06-06":"S-2102","2025-06-09":"B+859","2025-06-10":"S-1058","2025-06-11":"S-356","2025-06-12":"S-260","2025-06-13":"S-1023","2025-06-16":"S-1102","2025-06-17":"S-755","2025-06-18":"B+603","2025-06-19":"B+112","2025-06-20":"B+2526","2025-06-23":"B+2683","2025-06-24":"S-145","2025-06-25":"B+501","2025-06-26":"B+285","2025-06-27":"B+448","2025-06-30":"B+752","2025-07-01":"S-1428","2025-07-02":"S-573","2025-07-03":"B+348","2025-07-04":"S-169","2025-07-07":"B+1131","2025-07-08":"S-3006","2025-07-09":"B+1317","2025-07-10":"S-419","2025-07-11":"B+381","2025-07-14":"S-494","2025-07-15":"S-2003","2025-07-16":"B+890","2025-07-17":"B+2367","2025-07-18":"S-629","2025-07-21":"B+1071","2025-07-22":"B+1900","2025-07-23":"S-2180","2025-07-24":"B+1917","2025-07-25":"S-1298","2025-07-28":"S-1360","2025-07-29":"S-262","2025-07-30":"S-2292","2025-07-31":"S-1218","2025-08-01":"B+732","2025-08-04":"B+649","2025-08-05":"B+2326","2025-08-06":"B+992","2025-08-07":"B+935","2025-08-08":"B+388","2025-08-11":"S-735","2025-08-12":"B+6","2025-08-13":"S-30","2025-08-14":"S-869","2025-08-15":"S-34","2025-08-18":"S-914","2025-08-19":"S-1207","2025-08-20":"S-218","2025-08-21":"B+167","2025-08-22":"B+4441","2025-08-25":"B+955","2025-08-26":"B+1463","2025-08-27":"B+684","2025-08-28":"B+1377","2025-08-29":"B+2915","2025-09-01":"B+459","2025-09-02":"B+3835","2025-09-03":"B+1339","2025-09-04":"B+457","2025-09-05":"B+1162","2025-09-08":"B+1477","2025-09-09":"S-191","2025-09-10":"B+51","2025-09-11":"B+379","2025-09-12":"S-97","2025-09-15":"B+3010","2025-09-16":"S-294","2025-09-17":"B+548","2025-09-18":"S-2206","2025-09-19":"B+2153","2025-09-22":"B+1453","2025-09-23":"S-498","2025-09-24":"S-2690","2025-09-25":"S-283","2025-09-26":"B+2838","2025-09-29":"B+1659","2025-09-30":"B+1958","2025-10-01":"S-196","2025-10-02":"S-5615","2025-10-03":"B+1527","2025-10-06":"B+2819","2025-10-07":"S-1319","2025-10-08":"B+568","2025-10-09":"S-3910","2025-10-10":"B+1219","2025-10-13":"B+2507","2025-10-14":"B+3143","2025-10-15":"S-2","2025-10-16":"B+3757","2025-10-17":"S-7708","2025-10-20":"B+2519","2025-10-21":"S-7268","2025-10-22":"B+336","2025-10-23":"B+1466","2025-10-24":"B+4826","2025-10-27":"S-2273","2025-10-28":"B+1981","2025-10-29":"S-1961","2025-10-30":"B+607","2025-10-31":"S-3589","2025-11-03":"S-775","2025-11-04":"S-673","2025-11-05":"B+1103","2025-11-06":"S-3142","2025-11-07":"B+997","2025-11-10":"B+337","2025-11-11":"S-2938","2025-11-12":"B+6933","2025-11-13":"S-2502","2025-11-14":"B+4953","2025-11-17":"B+482","2025-11-18":"B+150","2025-11-19":"S-3604","2025-11-20":"S-3098","2025-11-21":"B+2025","2025-11-24":"B+1971","2025-11-25":"S-1132","2025-11-26":"B+1370","2025-11-27":"B+137","2025-11-28":"B+2370","2025-12-01":"S-2107","2025-12-02":"S-2753","2025-12-03":"S-3618","2025-12-04":"B+1726","2025-12-05":"S-2042","2025-12-08":"S-1037","2025-12-09":"B+1084","2025-12-10":"B+405","2025-12-11":"B+5259","2025-12-12":"S-5918","2025-12-15":"S-3453","2025-12-16":"S-1254","2025-12-17":"S-848","2025-12-18":"B+2377","2025-12-19":"B+2141","2025-12-22":"B+1499","2025-12-23":"S-492","2025-12-24":"S-1106","2025-12-26":"B+1120","2025-12-29":"S-7944","2025-12-30":"S-1068","2025-12-31":"S-2295","2026-01-02":"S-3957","2026-01-05":"B+2493","2026-01-06":"B+2035","2026-01-07":"B+1129","2026-01-08":"B+3949","2026-01-09":"B+2361","2026-01-12":"B+107","2026-01-13":"B+202","2026-01-14":"S-1888","2026-01-15":"B+1729","2026-01-16":"S-1070","2026-01-19":"B+605","2026-01-20":"B+1637","2026-01-21":"S-4599","2026-01-22":"B+5610","2026-01-23":"B+4131","2026-01-26":"B+2070","2026-01-27":"B+986","2026-01-28":"B+3282","2026-01-29":"S-24630","2026-01-30":"S-3432","2026-02-02":"S-4034","2026-02-03":"B+2270","2026-02-04":"S-14976","2026-02-05":"B+5355","2026-02-06":"B+2244","2026-02-09":"B+6634","2026-02-10":"S-2711","2026-02-11":"B+946","2026-02-12":"S-12069","2026-02-13":"B+2081","2026-02-16":"S-916","2026-02-17":"S-144","2026-02-18":"B+4601","2026-02-19":"S-181","2026-02-20":"B+2314","2026-02-23":"B+6372","2026-02-24":"B+2689","2026-02-25":"B+2726","2026-02-26":"B+1357","2026-02-27":"B+631","2026-03-02":"S-10372","2026-03-03":"S-5004","2026-03-04":"S-1815","2026-03-05":"S-4040","2026-03-06":"B+5474","2026-03-09":"B+3077","2026-03-10":"B+2229","2026-03-11":"S-122","2026-03-12":"S-2759","2026-03-13":"S-5560","2026-03-16":"S-3925","2026-03-17":"S-1461","2026-03-18":"B+874","2026-03-19":"S-3606","2026-03-20":"S-3305","2026-03-23":"S-7860","2026-03-24":"B+3973","2026-03-25":"B+1040","2026-03-26":"S-6343","2026-03-27":"B+8510","2026-03-30":"S-2117","2026-03-31":"B+3472","2026-04-01":"B+6183","2026-04-02":"B+5915","2026-04-06":"S-767","2026-04-07":"B+398","2026-04-08":"S-4319","2026-04-09":"B+4675","2026-04-10":"S-950","2026-04-13":"S-889","2026-04-14":"B+3682","2026-04-15":"S-999","2026-04-16":"S-929","2026-04-17":"B+2112","2026-04-20":"S-362","2026-04-21":"S-3722","2026-04-22":"S-1656","2026-04-23":"S-1982","2026-04-24":"B+2616","2026-04-27":"S-2912","2026-04-28":"S-729","2026-04-29":"B+263","2026-04-30":"S-2427","2026-05-01":"B+5218","2026-05-04":"S-4676","2026-05-05":"B+418","2026-05-06":"B+457","2026-05-07":"S-2086","2026-05-08":"S-1708","2026-05-11":"B+3192","2026-05-12":"S-3961","2026-05-13":"B+1191","2026-05-14":"S-1892","2026-05-15":"S-608","2026-05-18":"S-2779","2026-05-19":"S-2881","2026-05-20":"B+3292","2026-05-21":"B+783","2026-05-22":"S-844","2026-05-25":"B+317","2026-05-26":"S-1394","2026-05-27":"S-240","2026-05-28":"B+4956","2026-05-29":"B+4801","2026-06-01":"S-2865","2026-06-02":"S-1290","2026-06-03":"S-1806","2026-06-04":"S-2661","2026-06-05":"S-7101","2026-06-08":"B+887","2026-06-09":"S-6928","2026-06-10":"S-1820","2026-06-11":"B+672","2026-06-12":"B+2010","2026-06-15":"B+712","2026-06-16":"S-1941","2026-06-17":"B+2998","2026-06-18":"S-1990","2026-06-19":"S-2805","2026-06-22":"S-1053","2026-06-23":"B+2536","2026-06-24":"B+1441","2026-06-25":"B+2859","2026-06-26":"B+3141","2026-06-29":"S-1677","2026-06-30":"B+1952","2026-07-01":"B+5842","2026-07-02":"B+1072","2026-07-03":"S-1209"};
+let moveMap={}; // YYYY-MM-DD -> {dir:"BUY"/"SELL", pips:"+2998"}
+for(const d in MV_DATA){
+  const v=MV_DATA[d];
+  moveMap[d]={dir:v[0]==="B"?"BUY":"SELL",pips:v.slice(1)};
+}
+async function loadMovement(){
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent("Movement")}`;
+  try{
+    const res=await fetch(url);
+    const txt=await res.text();
+    const json=JSON.parse(txt.substring(txt.indexOf('{'),txt.lastIndexOf('}')+1));
+    let count=0;
+    json.table.rows.forEach(r=>{
+      const c=r.c; if(!c||!c[0])return;
+      let iso=null;
+      if(typeof c[0].v==="string"&&/^\d{4}-\d{2}-\d{2}/.test(c[0].v)) iso=c[0].v.slice(0,10);
+      else iso=parseDate(c[0].v,c[0].f);
+      if(!iso)return;
+      const dir=c[4]&&c[4].v?String(c[4].v).toUpperCase():null;      // col E: DIRECTION
+      const pips=c[3]&&c[3].v!==null&&c[3].v!==undefined?c[3].v:null; // col D: MOVE_PIPS
+      if(dir==="BUY"||dir==="SELL"){
+        let pt="";
+        if(pips!==null){const n=parseFloat(pips);if(!isNaN(n))pt=(n>0?"+":"")+Math.round(n);}
+        moveMap[iso]={dir,pips:pt};count++;
+      }
+    });
+    if(count) console.log(`Movement loaded: ${count} tarikh`);
+    renderBuckets();
+    if(pickedDate) renderOwnImage(pickedDate);
+  }catch(e){ console.log("Movement tab tak jumpa / gagal load",e); }
+}
+function mvBadge(date){
+  const m=moveMap[date];
+  if(!m) return "";
+  const cls=m.dir==="BUY"?"mv-buy":"mv-sell";
+  const arrow=m.dir==="BUY"?"\u25B2":"\u25BC";
+  return `<div class="mv-badge ${cls}">${arrow} ${m.dir}${m.pips?" "+m.pips+"p":""} \u00B7 16:00\u219219:00</div>`;
+}
+function parseDate(v,f){
+  if(typeof v==="string"&&v.startsWith("Date(")){
+    const p=v.match(/Date\((\d+),(\d+),(\d+)/);
+    if(p){const y=+p[1],m=(+p[2])+1,d=+p[3];
+      return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
+  }
+  if(f){const dd=new Date(f);if(!isNaN(dd))return dd.toISOString().slice(0,10);}
+  return null;
+}
+function setStatus(t,cls){const s=document.getElementById('status');s.textContent=t;s.className="status "+(cls||"");}
+
+/* ====== DYNAMIC BUCKET MATCHER (latest first) ====== */
+function findSamples(bk){
+  const S=parseFloat(bk.key);
+  if(!pickedDate) return [];
+  const pb=bezaMap[pickedDate];
+  if(pb===undefined) return [];
+  const out=[];
+  for(const date in IMG){
+    if(date===pickedDate) continue;          // jangan tunjuk tarikh sendiri
+    const b=bezaMap[date];
+    if(b===undefined)continue;
+    const selisih=Math.abs(b-pb);
+    const r=Math.round(selisih*10)/10;       // bulat selisih ke 1 titik
+    if(Math.abs(r-S)<0.001) out.push({date,beza:b,selisih:selisih,id:IMG[date]});
+  }
+  out.sort((a,b)=>a.date<b.date?1:-1);        // latest dulu, takde limit — bagi SEMUA sample
+  return out;
+}
+
+function renderBuckets(){
+  const root=document.getElementById('buckets');
+  if(!root) return;
+  if(!pickedDate){
+    root.innerHTML=`<div class="empty" style="padding:24px">\uD83D\uDC46 Pilih tarikh &amp; tekan <b>Cari Beza</b> \u2014 contoh setiap selisih akan keluar di sini</div>`;
+    return;
+  }
+  const pb=bezaMap[pickedDate];
+  if(pb===undefined){
+    root.innerHTML=`<div class="empty" style="padding:24px">Tarikh ${fmtDate(pickedDate)} takde data beza dalam sheet.</div>`;
+    return;
+  }
+  root.innerHTML=BUCKETS.map(bk=>{
+    const s=findSamples(bk);
+    const cards=s.length? s.map(x=>{
+      const recent=x.date>="2025-01-01";
+      return `<div class="card" onclick="openLb('${THUMB(x.id)}','${fmtDate(x.date)} · beza ${x.beza.toFixed(2)} · selisih ${x.selisih.toFixed(2)}')">
+        <div class="fav-btn ${isFav(x.id)?'on':''}" onclick="event.stopPropagation();toggleFav('${x.date}','${x.beza.toFixed(2)}','${x.id}')">${isFav(x.id)?'\u2605':'\u2606'}</div>
+        <div class="img"><img loading="lazy" src="${THUMB(x.id)}" alt="${x.date}"></div>
+        <div class="meta">
+          <div class="date">${fmtDate(x.date)} ${recent?'<span class="recent">\u25CF TERKINI</span>':''}</div>
+          <div class="beza">Beza: ${x.beza.toFixed(2)} · selisih ${x.selisih.toFixed(2)}</div>
+          ${mvBadge(x.date)}
+        </div>
+        <div class="cmp-btn" onclick="event.stopPropagation();openCompare('${x.date}','${x.id}','${x.beza.toFixed(2)}','${x.selisih.toFixed(2)}')">\uD83D\uDD00 Banding</div>
+        </div>`;
+    }).join('') : `<div class="empty">\u2014 kosong \u2014</div>`;
+    return `<div class="bucket">
+      <div class="bucket-head">
+        <span class="bucket-badge">SELISIH ${bk.key}</span>
+        <span class="bucket-desc">${bk.desc}</span>
+      </div>
+      <div class="grid">${cards}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ====== SEARCH ====== */
+function cariTarikh(){
+  const v=document.getElementById('dateInput').value;
+  const box=document.getElementById('result');
+  if(!v){box.classList.remove('show');return;}
+  pickedDate=v;
+  const beza=bezaMap[v];
+  document.getElementById('rDate').textContent=fmtDate(v);
+  if(beza===undefined){
+    document.getElementById('rBeza').textContent="tiada";
+    document.getElementById('rBucket').textContent="Data tarikh ni takde \u2014 tak boleh kira selisih";
+  }else{
+    document.getElementById('rBeza').textContent=beza.toFixed(2);
+    document.getElementById('rBucket').textContent="Contoh di bawah = hari lain ikut selisih dari "+beza.toFixed(2);
+  }
+  renderOwnImage(v);
+  box.classList.add('show');
+  renderBuckets();
+}
+function renderOwnImage(v){
+  const wrap=document.getElementById('rImgWrap');
+  const fid=IMG[v];
+  if(!fid){
+    wrap.innerHTML=`<div class="empty" style="padding:14px 4px">\u26A0\uFE0F Takde gambar chart utk ${fmtDate(v)} dalam index/Drive.</div>`;
+    return;
+  }
+  wrap.innerHTML=`<div class="card" style="max-width:420px" onclick="openLb('${THUMB(fid)}','${fmtDate(v)} · beza ${bezaMap[v]!==undefined?bezaMap[v].toFixed(2):'—'}')">
+    <div class="fav-btn ${isFav(fid)?'on':''}" onclick="event.stopPropagation();toggleFav('${v}','${bezaMap[v]!==undefined?bezaMap[v].toFixed(2):''}','${fid}')">${isFav(fid)?'\u2605':'\u2606'}</div>
+    <div class="img"><img loading="lazy" src="${THUMB(fid)}" alt="${v}"></div>
+    <div class="meta"><div class="date">${fmtDate(v)}</div><div class="beza">Chart tarikh ni</div>${mvBadge(v)}</div>
+  </div>`;
+}
+function nearestBucket(b){
+  const keys=[0.0,0.1,0.3,0.4,0.8];
+  let best=keys[0],diff=Math.abs(b-keys[0]);
+  keys.forEach(k=>{if(Math.abs(b-k)<diff){diff=Math.abs(b-k);best=k;}});
+  return best.toFixed(1);
+}
+function fmtDate(iso){
+  const [y,m,d]=iso.split('-');
+  const mn=["Jan","Feb","Mac","Apr","Mei","Jun","Jul","Ogos","Sep","Okt","Nov","Dis"];
+  return `${d} ${mn[+m-1]} ${y}`;
+}
+
+/* ====== SETTINGS ====== */
+function toggleSettings(){
+  const b=document.getElementById('settingsBody'),a=document.getElementById('setArrow');
+  const open=b.style.display==='none';
+  b.style.display=open?'block':'none';a.textContent=open?'▲':'▼';
+}
+function saveSettings(){
+  const id=document.getElementById('sheetIdInput').value.trim();
+  const tab=document.getElementById('sheetTabInput').value.trim();
+  if(id){SHEET_ID=id;localStorage.setItem("beza_sheet_id",id);}
+  if(tab){SHEET_TAB=tab;localStorage.setItem("beza_sheet_tab",tab);}
+  const fid=document.getElementById('folderIdInput').value.trim();
+  const key=document.getElementById('apiKeyInput').value.trim();
+  FOLDER_ID=fid||DEFAULT_FOLDER; localStorage.setItem("beza_folder_id",FOLDER_ID);
+  API_KEY=key; localStorage.setItem("beza_api_key",key);
+  setStatus("⏳ Sync semula…","");bezaMap={};
+  (async()=>{ await loadSheet(); loadMovement(); await loadDriveIndex(); })();
+}
+
+
+/* ====== FAVORITES & FOLDER ====== */
+let FAVS = JSON.parse(localStorage.getItem("beza_favs")||"{}");      // id -> {date,beza,id,folder}
+let FOLDERS = JSON.parse(localStorage.getItem("beza_folders")||"[\"Umum\"]");
+function saveFavs(){ localStorage.setItem("beza_favs",JSON.stringify(FAVS)); localStorage.setItem("beza_folders",JSON.stringify(FOLDERS)); }
+function isFav(id){ return FAVS.hasOwnProperty(id); }
+function toggleFav(date,beza,id){
+  if(FAVS[id]){ delete FAVS[id]; }
+  else {
+    const folder = pickedDate ? fmtDate(pickedDate) : "Umum";
+    if(!FOLDERS.includes(folder)) FOLDERS.push(folder);
+    FAVS[id]={date:date,beza:beza,id:id,folder:folder};
+  }
+  saveFavs(); renderBuckets(); renderFavs();
+  if(pickedDate) renderOwnImage(pickedDate);
+}
+function addFolder(){
+  const n=(prompt("Nama folder baru:")||"").trim();
+  if(!n) return;
+  if(!FOLDERS.includes(n)) FOLDERS.push(n);
+  saveFavs(); renderFavs();
+}
+function setFavFolder(id,folder){ if(FAVS[id]){ FAVS[id].folder=folder; saveFavs(); renderFavs(); } }
+function removeFav(id){ delete FAVS[id]; saveFavs(); renderBuckets(); renderFavs(); }
+function toggleFavPanel(){
+  const b=document.getElementById('favBody'),a=document.getElementById('favArrow');
+  const open=b.style.display==='none'; b.style.display=open?'block':'none'; a.textContent=open?'\u25B2':'\u25BC';
+}
+function renderFavs(){
+  const ids=Object.keys(FAVS);
+  document.getElementById('favCount').textContent=ids.length;
+  const list=document.getElementById('favList');
+  if(!list) return;
+  if(!ids.length){ list.innerHTML='<div class="empty">Tiada favorite lagi. Tekan \u2B50 atas chart untuk simpan.</div>'; return; }
+  // folder yang ada isi, susun: Umum dulu, lepas tu folder lain ikut nama menurun
+  let used=FOLDERS.filter(f=>ids.some(id=>FAVS[id].folder===f));
+  used.sort((a,b)=>{ if(a==="Umum")return 1; if(b==="Umum")return -1; return a<b?1:-1; });
+  list.innerHTML=used.map(folder=>{
+    let items=ids.filter(id=>FAVS[id].folder===folder);
+    items.sort((a,b)=> FAVS[a].date<FAVS[b].date?1:-1); // tarikh latest dulu
+    if(!items.length) return '';
+    const cards=items.map(id=>{
+      const x=FAVS[id];
+      const sel=FOLDERS.map(f=>`<option value="${f}" ${f===x.folder?'selected':''}>${f}</option>`).join('');
+      return `<div class="fav-card">
+        <div class="fc-x" onclick="removeFav('${id}')">\u00D7</div>
+        <img src="${THUMB(id)}" onclick="openLb('${THUMB(id)}','${fmtDate(x.date)} · beza ${x.beza}')">
+        <div class="fc-meta">
+          <div class="fc-date">${fmtDate(x.date)}</div>
+          <div class="fc-beza">beza ${x.beza}</div>
+          <select onchange="setFavFolder('${id}',this.value)">${sel}</select>
+        </div></div>`;
+    }).join('');
+    return `<div class="fav-folder"><h4>\uD83D\uDCC1 ${folder} <span style="color:var(--mut);font-size:.8em">(${items.length})</span></h4><div class="fav-mini">${cards}</div></div>`;
+  }).join('');
+}
+
+/* ====== LIGHTBOX ====== */
+function openLb(src,cap){
+  document.getElementById('lbImg').src=src;
+  document.getElementById('lbCap').textContent=cap;
+  document.getElementById('lb').classList.add('show');
+}
+function closeLb(){document.getElementById('lb').classList.remove('show');}
+
+/* ====== COMPARE / OVERLAY ====== */
+function openCompare(date,id,beza,selisih){
+  if(!pickedDate){ alert('Pilih tarikh & tekan Cari Beza dulu.'); return; }
+  const ownFid=IMG[pickedDate];
+  if(!ownFid){ alert('Takde gambar chart untuk tarikh asal ('+fmtDate(pickedDate)+').'); return; }
+  const ownBeza=bezaMap[pickedDate];
+
+  document.getElementById('cmpLabelA').textContent=fmtDate(pickedDate)+' (asal)'+(ownBeza!==undefined?' · beza '+ownBeza.toFixed(2):'');
+  document.getElementById('cmpLabelB').textContent=fmtDate(date)+' · beza '+beza+' · selisih '+selisih;
+  document.getElementById('cmpImgA').src=THUMB(ownFid);
+  document.getElementById('cmpImgB').src=THUMB(id);
+  document.getElementById('cmpBase').src=THUMB(ownFid);
+  document.getElementById('cmpTop').src=THUMB(id);
+  document.getElementById('cmpTop').style.opacity=.5;
+  document.getElementById('cmpSlider').value=50;
+  document.getElementById('cmpLegA').textContent=fmtDate(pickedDate);
+  document.getElementById('cmpLegB').textContent=fmtDate(date);
+  setCmpMode('side');
+  document.getElementById('cmpModal').classList.add('show');
+}
+function closeCompare(){ document.getElementById('cmpModal').classList.remove('show'); }
+function setCmpMode(m){
+  const sideBtn=document.getElementById('cmpBtnSide'),ovBtn=document.getElementById('cmpBtnOverlay');
+  const sideView=document.getElementById('cmpSideView'),ovView=document.getElementById('cmpOverlayView');
+  if(m==='side'){ sideView.style.display='flex'; ovView.style.display='none'; sideBtn.classList.add('active'); ovBtn.classList.remove('active'); }
+  else{ sideView.style.display='none'; ovView.style.display='block'; ovBtn.classList.add('active'); sideBtn.classList.remove('active'); }
+}
+function updateCmpOpacity(v){ document.getElementById('cmpTop').style.opacity=(v/100); }
+
+/* ====== FREE PATTERN SCAN (client-side color-signature, no AI cost) ====== */
+/* ====== + optional on-demand AI verify per card (Claude vision) ====== */
+let scanSampleImg=null, scanSampleB64=null, scanSampleType=null;
+let scanCache={}; // date -> {base64, contentType, beza, id}
+const SIG_W=240, SIG_H=140;
+
+function toggleScanPanel(){
+  const b=document.getElementById('scanBody'),a=document.getElementById('scanArrow');
+  const open=b.style.display==='none';
+  b.style.display=open?'block':'none'; a.textContent=open?'\u25B2':'\u25BC';
+}
+
+document.getElementById('scanFileInput').addEventListener('change', (e)=>{
+  const f=e.target.files[0];
+  if(!f) return;
+  scanSampleType=f.type||'image/jpeg';
+  const reader=new FileReader();
+  reader.onload=()=>{ scanSampleB64=reader.result.split(',')[1]; };
+  reader.readAsDataURL(f);
+
+  const url=URL.createObjectURL(f);
+  const img=new Image();
+  img.onload=()=>{
+    scanSampleImg=img;
+    const prev=document.getElementById('scanPreview');
+    prev.src=url; prev.style.display='block';
+    document.getElementById('scanDrop').classList.add('has-img');
+  };
+  img.src=url;
+});
+
+// Draw an image (already loaded, or via data: URI) to a fixed WxH canvas and
+// extract a per-column bullish/bearish signature based on candle color pixels.
+function extractSignature(imgEl){
+  const c=document.createElement('canvas');
+  c.width=SIG_W; c.height=SIG_H;
+  const ctx=c.getContext('2d');
+  ctx.drawImage(imgEl,0,0,SIG_W,SIG_H);
+  const data=ctx.getImageData(0,0,SIG_W,SIG_H).data;
+  const sig=new Array(SIG_W).fill(0);
+  for(let x=0;x<SIG_W;x++){
+    let up=0, down=0;
+    for(let y=0;y<SIG_H;y++){
+      const i=(y*SIG_W+x)*4;
+      const r=data[i], g=data[i+1], b=data[i+2];
+      // blue/teal candle (up) vs red/pink candle (down) — ignore black bg & gray/white text
+      if(b>110 && b>r+25) up++;
+      else if(r>110 && r>b+25) down++;
+    }
+    const total=up+down;
+    sig[x]= total>0 ? (up-down)/total : 0;
+  }
+  return sig;
+}
+
+function correlate(a,b){
+  const n=a.length;
+  const meanA=a.reduce((s,v)=>s+v,0)/n, meanB=b.reduce((s,v)=>s+v,0)/n;
+  let num=0, denA=0, denB=0;
+  for(let i=0;i<n;i++){
+    const da=a[i]-meanA, db=b[i]-meanB;
+    num+=da*db; denA+=da*da; denB+=db*db;
+  }
+  if(denA===0||denB===0) return 0;
+  return num/Math.sqrt(denA*denB); // -1..1
+}
+
+function scoreClass(s){
+  if(s===null||s===undefined) return 'low';
+  if(s>=70) return '';
+  if(s>=40) return 'mid';
+  return 'low';
+}
+
+function renderScanResults(list){
+  const el=document.getElementById('scanResults');
+  el.innerHTML=list.map(r=>`
+    <div class="scan-card">
+      <img loading="lazy" src="${THUMB(r.id)}" alt="${r.date}" onclick="openLb('${THUMB(r.id)}','${fmtDate(r.date)} \u00B7 score ${r.score!=null?r.score+'%':'-'}')">
+      <div class="sc-meta">
+        <div class="sc-date">${fmtDate(r.date)} <span class="sc-score ${scoreClass(r.score)}">${r.score!=null?r.score+'%':'-'}</span></div>
+        <div class="sc-beza">Beza: ${r.beza!==undefined&&r.beza!==null?r.beza.toFixed(2):'-'}</div>
+        <div id="ai-${r.date}">
+          <button class="sc-verify-btn" onclick="verifyWithAI('${r.date}')">\uD83E\uDD16 Verify AI</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function loadImgFromBase64(base64,contentType){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>resolve(img);
+    img.onerror=reject;
+    img.src=`data:${contentType};base64,${base64}`;
+  });
+}
+
+async function runScan(){
+  if(!scanSampleImg){ alert('Upload gambar sample dulu.'); return; }
+  const limitSel=document.getElementById('scanLimit').value;
+
+  let dates;
+  if(limitSel==='buckets'){
+    if(!pickedDate || bezaMap[pickedDate]===undefined){
+      alert('Pilih tarikh & tekan "Cari Beza" dulu (supaya scan tahu nak banding ikut selisih mana).');
+      return;
+    }
+    // Union of every date across all selisih buckets (0.0/0.1/0.3/0.4/0.8) relative to pickedDate
+    const seen=new Set();
+    dates=[];
+    BUCKETS.forEach(bk=>{
+      findSamples(bk).forEach(x=>{
+        if(!seen.has(x.date)){ seen.add(x.date); dates.push(x.date); }
+      });
+    });
+    dates.sort((a,b)=>a<b?1:-1); // terkini dulu
+  } else {
+    dates=Object.keys(IMG).sort((a,b)=>a<b?1:-1); // terkini dulu
+    if(limitSel!=='all') dates=dates.slice(0,parseInt(limitSel,10));
+  }
+
+  if(dates.length===0){
+    document.getElementById('scanProgress').textContent='\u26A0\uFE0F Takde calon dalam bucket selisih tarikh ni. Cuba pilih mode "terkini" instead.';
+    document.getElementById('scanResults').innerHTML='';
+    return;
+  }
+
+  const progressEl=document.getElementById('scanProgress');
+  document.getElementById('scanResults').innerHTML='';
+  const sampleSig=extractSignature(scanSampleImg);
+  const results=[];
+  scanCache={};
+
+  for(let i=0;i<dates.length;i++){
+    const date=dates[i];
+    progressEl.textContent=`\u23F3 Scanning ${i+1}/${dates.length} \u2014 ${fmtDate(date)}...`;
+    try{
+      const {base64,contentType}=await fetch(`/.netlify/functions/fetch-image?id=${IMG[date]}`).then(r=>{
+        if(!r.ok) throw new Error('fetch-image gagal ('+r.status+')');
+        return r.json();
+      });
+      const candImg=await loadImgFromBase64(base64,contentType);
+      const candSig=extractSignature(candImg);
+      const corr=correlate(sampleSig,candSig);
+      const score=Math.round(((corr+1)/2)*100);
+      scanCache[date]={base64,contentType,beza:bezaMap[date],id:IMG[date]}; // cache for on-demand AI verify
+      results.push({date,id:IMG[date],beza:bezaMap[date],score});
+    }catch(err){
+      console.error(date,err);
+    }
+    results.sort((a,b)=>(b.score||0)-(a.score||0));
+    renderScanResults(results.slice(0,15));
+  }
+  const modeLabel=limitSel==='buckets'?'ikut selisih tarikh dicari':`${dates.length} tarikh`;
+  progressEl.textContent=`\u2705 Selesai \u2014 ${dates.length} tarikh discan (${modeLabel}, percuma, tiada kos API). Top 15 ikut match score.`;
+}
+
+/* ====== ON-DEMAND AI VERIFY (only called per-card, minimal cost) ====== */
+async function verifyWithAI(date){
+  const slot=document.getElementById('ai-'+date);
+  const cand=scanCache[date];
+  if(!cand||!scanSampleB64){ slot.innerHTML='<span class="sc-verdict">\u26A0\uFE0F Data tak lengkap, cuba scan semula.</span>'; return; }
+  slot.innerHTML='<span class="sc-verdict">\u23F3 AI tengah analisa...</span>';
+  try{
+    const res=await fetch('/.netlify/functions/vision-compare',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        sampleBase64:scanSampleB64, sampleType:scanSampleType,
+        candidateBase64:cand.base64, candidateType:cand.contentType,
+        candidateDate:date, candidateBeza:cand.beza!==undefined&&cand.beza!==null?cand.beza.toFixed(2):'-'
+      })
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const j=await res.json();
+    if(j.error){ slot.innerHTML=`<span class="sc-verdict">\u26A0\uFE0F ${j.error}</span>`; return; }
+    const cls=scoreClass(j.match_score);
+    slot.innerHTML=`<div class="sc-ai-result"><span class="sc-score ${cls}">${j.match_score!=null?j.match_score+'%':'-'}</span> ${j.verdict||''}</div>`;
+  }catch(err){
+    slot.innerHTML=`<span class="sc-verdict">\u26A0\uFE0F Gagal verify: ${err.message}</span>`;
+  }
+}
+
+/* ====== INIT ====== */
+document.getElementById('sheetIdInput').value=SHEET_ID;
+document.getElementById('sheetTabInput').value=SHEET_TAB;
+document.getElementById('folderIdInput').value=FOLDER_ID;
+document.getElementById('apiKeyInput').value=API_KEY;
+renderBuckets(); // render fallback dulu
+renderFavs();
+(async()=>{ await loadSheet(); loadMovement(); await loadDriveIndex(); })();
+</script>
+</body>
+</html>  .scan-drop.has-img{border-color:var(--gold);color:var(--gold)}
   #scanFileInput{display:none}
   #scanPreview{display:none;max-width:100%;max-height:160px;border-radius:8px;margin-top:10px}
   .scan-row{display:flex;gap:8px;margin-top:10px;align-items:center}
